@@ -1,0 +1,44 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="116" y1="94" x2="902" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#061523"/>
+      <stop offset="0.44" stop-color="#0A3141"/>
+      <stop offset="1" stop-color="#15927E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(766 186) rotate(131) scale(506 620)">
+      <stop stop-color="#7EF3D5" stop-opacity="0.56"/>
+      <stop offset="1" stop-color="#7EF3D5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="focus" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(520 534) rotate(90) scale(380 380)">
+      <stop stop-color="#C8FFF3" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#C8FFF3" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="warm" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(250 824) rotate(-28) scale(344 242)">
+      <stop stop-color="#FFB36A" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#FF9C58" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(520 970) rotate(-90) scale(724 904)">
+      <stop stop-color="#04111D" stop-opacity="0.28"/>
+      <stop offset="0.5" stop-color="#04111D" stop-opacity="0"/>
+      <stop offset="1" stop-color="#04111D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+  <rect width="1024" height="1024" fill="url(#focus)"/>
+  <rect width="1024" height="1024" fill="url(#warm)"/>
+  <rect width="1024" height="1024" fill="url(#vignette)"/>
+
+  <g opacity="0.1">
+    <path d="M170 300H846" stroke="white" stroke-width="2"/>
+    <path d="M170 420H846" stroke="white" stroke-width="2"/>
+    <path d="M170 540H846" stroke="white" stroke-width="2"/>
+    <path d="M170 660H846" stroke="white" stroke-width="2"/>
+    <path d="M170 780H846" stroke="white" stroke-width="2"/>
+    <path d="M256 214V824" stroke="white" stroke-width="2"/>
+    <path d="M406 214V824" stroke="white" stroke-width="2"/>
+    <path d="M556 214V824" stroke="white" stroke-width="2"/>
+    <path d="M706 214V824" stroke="white" stroke-width="2"/>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "Bash(python3:*)",
+      "Bash(/Users/xr/IDEA.localized/FloatMarket/FloatMarket/zh-Hans.lproj/Localizable.strings:*)"
+    ]
+  }
+}

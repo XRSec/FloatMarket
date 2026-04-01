@@ -1,0 +1,113 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.03529,0.12157,0.15686,1.00000"
+  },
+  "groups" : [
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "FloatMarket-IconComposer-04-trend.svg",
+          "name" : "FloatMarket-IconComposer-04-trend",
+          "position" : {
+            "scale" : 0.94,
+            "translation-in-points" : [
+              -4,
+              18
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.35
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.15
+      }
+    },
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "FloatMarket-IconComposer-03-bars.svg",
+          "name" : "FloatMarket-IconComposer-03-bars",
+          "position" : {
+            "scale" : 0.94,
+            "translation-in-points" : [
+              -4,
+              18
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.28
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.12
+      }
+    },
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "glass" : true,
+          "image-name" : "FloatMarket-IconComposer-02-chrome.svg",
+          "name" : "FloatMarket-IconComposer-02-chrome",
+          "position" : {
+            "scale" : 0.94,
+            "translation-in-points" : [
+              0,
+              18
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.42
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.24
+      }
+    },
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "FloatMarket-IconComposer-01-background.svg",
+          "name" : "FloatMarket-IconComposer-01-background"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.08
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
