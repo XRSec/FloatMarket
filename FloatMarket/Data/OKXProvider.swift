@@ -49,10 +49,7 @@ extension MarketDataClient {
                                 usedBaseURL: baseURL
                             )
 
-                            return SourceFetchResult(
-                                snapshots: [snapshot],
-                                logs: [LogEntry(level: .info, message: String(format: NSLocalizedString("OKX Refresh Succeeded: %@.", comment: ""), item.symbol))]
-                            )
+                            return SourceFetchResult(snapshots: [snapshot])
                         } catch {
                             return SourceFetchResult(
                                 logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("OKX Decode Failed [%@]: %@", comment: ""), item.symbol, error.localizedDescription))]
@@ -91,6 +88,7 @@ extension MarketStreamController {
         settings: AppSettings
     ) async {
         let urls = config.candidateWebSocketURLs
+        await stateHandler(.okxSpot, .connecting)
         guard !urls.isEmpty else {
             await stateHandler(.okxSpot, .disconnected)
             await snapshotHandler([], [LogEntry(level: .error, message: NSLocalizedString("OKX WebSocket URL Is Missing. Falling Back To HTTP.", comment: ""))])
@@ -113,13 +111,16 @@ extension MarketStreamController {
                     settings: settings
                 )
             } catch {
+                if Task.isCancelled { break }
                 await stateHandler(.okxSpot, .disconnected)
                 await snapshotHandler([], [LogEntry(level: .error, message: NetworkLogFormatter.webSocketDisconnectedMessage(sourceName: "OKX", error: error))])
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
 
-        await stateHandler(.okxSpot, .disconnected)
+        if !Task.isCancelled {
+            await stateHandler(.okxSpot, .disconnected)
+        }
     }
 
     static func connectOKX(

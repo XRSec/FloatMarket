@@ -255,7 +255,9 @@ struct MainView: View {
                     QuoteRow(snapshot: snapshot)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var floatingOverlayControls: some View {
@@ -400,12 +402,13 @@ struct QuoteRow: View {
     let snapshot: QuoteSnapshot
 
     private var fontSize: CGFloat { CGFloat(settingsStore.settings.floatingFontSize) }
+    private var iconSize: CGFloat { max(18, ceil(fontSize * 0.72)) }
 
     var body: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    MarketIconView(snapshot: snapshot)
+                    MarketIconView(snapshot: snapshot, size: iconSize)
 
                     Text(snapshot.item.displayName)
                         .font(.system(size: fontSize, weight: .semibold, design: .rounded))
@@ -547,14 +550,15 @@ private struct CollapsedQuoteRow: View {
 
 private struct MarketIconView: View {
     let snapshot: QuoteSnapshot
+    var size: CGFloat = 18
 
     var body: some View {
         if let assetName = assetName, let image = NSImage(named: assetName) {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 18, height: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: max(5, size * 0.28), style: .continuous))
         } else {
             fallbackBadge
         }
@@ -586,9 +590,9 @@ private struct MarketIconView: View {
 
     private var fallbackBadge: some View {
         Text(fallbackText)
-            .font(.system(size: 10, weight: .black, design: .rounded))
+            .font(.system(size: max(10, size * 0.54), weight: .black, design: .rounded))
             .foregroundStyle(.white)
-            .frame(width: 18, height: 18)
+            .frame(width: size, height: size)
             .background(Circle().fill(fallbackBackground))
     }
 

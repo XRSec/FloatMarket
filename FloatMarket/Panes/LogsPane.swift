@@ -78,7 +78,7 @@ struct LogsPane: View {
                     ControlCenterEmptyState(
                         systemImage: "doc.text.magnifyingglass",
                         title: NSLocalizedString("No Logs Yet", comment: ""),
-                        message: NSLocalizedString("Request failures, fallbacks, proxy test results, and decoding issues will appear here.", comment: "")
+                        message: NSLocalizedString("WebSocket recovery syncs, request failures, proxy test results, and decoding issues will appear here.", comment: "")
                     )
                 } else if filteredEntries.isEmpty {
                     ControlCenterEmptyState(
@@ -123,7 +123,7 @@ struct LogsPane: View {
             } label: {
                 ControlCenterSectionLabel(
                     title: NSLocalizedString("Events", comment: ""),
-                    subtitle: NSLocalizedString("Events are shown newest first so current issues stay on top.", comment: "")
+                    subtitle: NSLocalizedString("Events are shown newest first so stream recovery and recent failures stay easy to trace.", comment: "")
                 )
             }
         }

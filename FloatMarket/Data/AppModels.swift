@@ -1208,6 +1208,7 @@ struct QuoteSnapshot: Identifiable, Equatable {
     private static let priceFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 4
         return formatter

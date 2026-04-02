@@ -72,7 +72,7 @@ Built-in templates include common instruments such as:
   - Spot templates: `BTC`, `ETH`, `SOL`, `XRP`, `DOGE`
   - Perpetual templates: `BTC Perpetual`, `ETH Perpetual`, `SOL Perpetual`, `XRP Perpetual`, `DOGE Perpetual`
 
-Perpetual feeds prefer WebSocket streaming when available, with HTTP refresh as fallback.
+Global indices and snapshot-only feeds use interval-based polling. WebSocket feeds do not use timer-based refreshes, and only trigger a one-off HTTP snapshot sync after disconnects or reconnects.
 
 ## User Experience
 
@@ -91,6 +91,10 @@ Perpetual feeds prefer WebSocket streaming when available, with HTTP refresh as 
   - data source endpoints
   - watchlist editing
   - proxy testing
+- The logs view focuses on:
+  - HTTP snapshot recovery after WebSocket disconnects
+  - HTTP resync after WebSocket reconnects
+  - request failures, fallbacks, and decode errors
 
 ## Project Layout
 

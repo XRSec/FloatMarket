@@ -10,9 +10,14 @@ struct GeneralSettingsView: View {
                 Toggle(NSLocalizedString("Auto Refresh", comment: ""), isOn: settingsStore.draftBinding(for: \.autoRefresh))
                 Toggle(NSLocalizedString("Keep Floating", comment: ""), isOn: settingsStore.draftBinding(for: \.keepWindowFloating))
 
+                Text(NSLocalizedString("Auto refresh only polls indices and HTTP snapshot feeds. WebSocket feeds only resync after disconnects or reconnects.", comment: ""))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 ControlCenterSliderRow(
                     title: NSLocalizedString("Refresh Interval", comment: ""),
-                    subtitle: NSLocalizedString("Intervals below 5 seconds add load without much value.", comment: ""),
+                    subtitle: NSLocalizedString("Choose how often polled sources are checked. This does not force timer-based refreshes on WebSocket feeds.", comment: ""),
                     valueText: "\(Int(settingsStore.draftSettings.refreshInterval)) s",
                     value: settingsStore.draftBinding(for: \.refreshInterval),
                     range: 3...60,
@@ -22,7 +27,7 @@ struct GeneralSettingsView: View {
             } label: {
                 ControlCenterSectionLabel(
                     title: NSLocalizedString("Runtime", comment: ""),
-                    subtitle: NSLocalizedString("High-frequency runtime controls live at the top.", comment: "")
+                    subtitle: NSLocalizedString("Polling controls live here. WebSocket feeds recover with snapshot syncs after disconnects and reconnects.", comment: "")
                 )
             }
 
@@ -121,7 +126,7 @@ struct GeneralSettingsView: View {
             } label: {
                 ControlCenterSectionLabel(
                     title: NSLocalizedString("Quick Actions", comment: ""),
-                    subtitle: NSLocalizedString("Common actions stay visible without hunting through the page.", comment: "")
+                    subtitle: NSLocalizedString("Refresh Now only polls indices and HTTP snapshot feeds.", comment: "")
                 )
             }
         }

@@ -49,10 +49,7 @@ extension MarketDataClient {
                                     usedBaseURL: baseURL
                                 )
 
-                                return SourceFetchResult(
-                                    snapshots: [snapshot],
-                                    logs: [LogEntry(level: .info, message: String(format: NSLocalizedString("Gate Refresh Succeeded: %@.", comment: ""), item.symbol))]
-                                )
+                                return SourceFetchResult(snapshots: [snapshot])
                             }
 
                             let response = try JSONDecoder().decode([GateFuturesTicker].self, from: data)
@@ -79,10 +76,7 @@ extension MarketDataClient {
                                 usedBaseURL: baseURL
                             )
 
-                            return SourceFetchResult(
-                                snapshots: [snapshot],
-                                logs: [LogEntry(level: .info, message: String(format: NSLocalizedString("Gate Refresh Succeeded: %@.", comment: ""), item.symbol))]
-                            )
+                            return SourceFetchResult(snapshots: [snapshot])
                         } catch {
                             return SourceFetchResult(
                                 logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Gate Decode Failed [%@]: %@", comment: ""), item.symbol, error.localizedDescription))]
@@ -123,6 +117,7 @@ extension MarketStreamController {
         settings: AppSettings
     ) async {
         let urls = config.candidateWebSocketURLs
+        await stateHandler(.gateSpot, .connecting)
         guard !urls.isEmpty else {
             await stateHandler(.gateSpot, .disconnected)
             await snapshotHandler([], [LogEntry(level: .error, message: NSLocalizedString("Gate WebSocket URL Is Missing. Falling Back To HTTP.", comment: ""))])
@@ -145,13 +140,16 @@ extension MarketStreamController {
                     settings: settings
                 )
             } catch {
+                if Task.isCancelled { break }
                 await stateHandler(.gateSpot, .disconnected)
                 await snapshotHandler([], [LogEntry(level: .error, message: NetworkLogFormatter.webSocketDisconnectedMessage(sourceName: "Gate", error: error))])
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
 
-        await stateHandler(.gateSpot, .disconnected)
+        if !Task.isCancelled {
+            await stateHandler(.gateSpot, .disconnected)
+        }
     }
 
     static func connectGate(

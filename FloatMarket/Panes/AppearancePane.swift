@@ -76,7 +76,7 @@ struct AppearancePane: View {
                 subtitle: NSLocalizedString("Controls quote rows and supporting labels in the floating window.", comment: ""),
                 valueText: "\(Int(draftSettings.floatingFontSize)) pt",
                 value: settingsStore.draftBinding(for: \.floatingFontSize),
-                range: 11...22,
+                range: 11...80,
                 step: 1
             )
 
@@ -85,7 +85,7 @@ struct AppearancePane: View {
                 subtitle: NSLocalizedString("Floating window width.", comment: ""),
                 valueText: "\(Int(draftSettings.floatingWidth))",
                 value: settingsStore.draftBinding(for: \.floatingWidth),
-                range: 160...400,
+                range: 160...800,
                 step: 5
             )
 
@@ -127,7 +127,7 @@ struct AppearancePane: View {
                 subtitle: NSLocalizedString("Larger text also expands the mini window footprint.", comment: ""),
                 valueText: "\(Int(draftSettings.miniWindowFontSize)) pt",
                 value: settingsStore.draftBinding(for: \.miniWindowFontSize),
-                range: 11...50,
+                range: 11...100,
                 step: 1
             )
         } label: {
@@ -148,7 +148,7 @@ struct AppearancePane: View {
                     subtitle: NSLocalizedString("Distance from edge that triggers snapping.", comment: ""),
                     valueText: "\(Int(draftSettings.snapThreshold))",
                     value: settingsStore.draftBinding(for: \.snapThreshold),
-                    range: 40...400,
+                    range: 40...800,
                     step: 10
                 )
 

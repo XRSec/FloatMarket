@@ -69,10 +69,11 @@ Core priorities:
 
 - Primary engine: WebSocket
 - Backup engine: HTTP
-- Manual refresh: force HTTP snapshot
+- Manual refresh: poll snapshot-only feeds only
 - Auto refresh:
-  - Baidu always checked by interval
-  - OKX/Gate only use HTTP when WebSocket is disconnected
+  - global indices and snapshot-only feeds are checked by interval
+  - WebSocket feeds do not use timer-based refresh
+  - OKX/Gate/Binance stream feeds trigger a one-off HTTP sync after disconnects or reconnects
 
 ## 4. Proxy Strategy
 

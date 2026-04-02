@@ -42,10 +42,7 @@ extension MarketDataClient {
                                 usedBaseURL: baseURL
                             )
 
-                            return SourceFetchResult(
-                                snapshots: [snapshot],
-                                logs: [LogEntry(level: .info, message: String(format: NSLocalizedString("Binance Refresh Succeeded: %@.", comment: ""), item.symbol))]
-                            )
+                            return SourceFetchResult(snapshots: [snapshot])
                         } catch {
                             return SourceFetchResult(
                                 logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Binance Decode Failed [%@]: %@", comment: ""), item.symbol, error.localizedDescription))]
@@ -82,6 +79,7 @@ extension MarketStreamController {
         settings: AppSettings
     ) async {
         let urls = config.candidateWebSocketURLs
+        await stateHandler(.binancePerp, .connecting)
         guard !urls.isEmpty else {
             await stateHandler(.binancePerp, .disconnected)
             await snapshotHandler([], [LogEntry(level: .error, message: NSLocalizedString("Binance WebSocket URL Is Missing. Falling Back To HTTP.", comment: ""))])
@@ -104,13 +102,16 @@ extension MarketStreamController {
                     settings: settings
                 )
             } catch {
+                if Task.isCancelled { break }
                 await stateHandler(.binancePerp, .disconnected)
                 await snapshotHandler([], [LogEntry(level: .error, message: NetworkLogFormatter.webSocketDisconnectedMessage(sourceName: "Binance", error: error))])
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
 
-        await stateHandler(.binancePerp, .disconnected)
+        if !Task.isCancelled {
+            await stateHandler(.binancePerp, .disconnected)
+        }
     }
 
     static func connectBinance(

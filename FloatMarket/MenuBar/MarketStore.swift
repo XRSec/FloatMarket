@@ -20,6 +20,16 @@ struct MiniWindowLayoutMetrics: Equatable {
     let labelFontSize: CGFloat
 }
 
+private enum RefreshRequest: Equatable {
+    case snapshot(reason: String)
+    case streamFallback(kind: DataSourceKind, trigger: StreamSyncTrigger)
+}
+
+private enum StreamSyncTrigger: Equatable {
+    case disconnected
+    case connected
+}
+
 @MainActor
 final class MarketStore: ObservableObject {
     let settingsStore: SettingsStore
@@ -44,6 +54,7 @@ final class MarketStore: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var settingsObservation: Task<Void, Never>?
     private var previousSettings: AppSettings
+    private var pendingRefreshRequests: [RefreshRequest] = []
     private lazy var streams = MarketStreamController(
         snapshotHandler: { [weak self] snapshots, logs in
             guard let self else { return }
@@ -51,7 +62,7 @@ final class MarketStore: ObservableObject {
             self.append(logs: logs)
         },
         stateHandler: { [weak self] kind, state in
-            self?.streamStates[kind] = state
+            self?.handleStreamStateChange(kind: kind, state: state)
         }
     )
 
@@ -129,6 +140,11 @@ final class MarketStore: ObservableObject {
             refreshTask?.cancel()
             refreshTask = nil
             streams.stop()
+            streamStates = [
+                .okxSpot: .disconnected,
+                .gateSpot: .disconnected,
+                .binancePerp: .disconnected
+            ]
             showsAllGlobalIndices = false
             updateFloatingWindowState(isCollapsed: false, dockSide: .none)
         }
@@ -320,29 +336,7 @@ final class MarketStore: ObservableObject {
     // MARK: - Refresh
 
     func refreshNow(reason: String) async {
-        guard hasEnabledRefreshItems else { return }
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        addLog(.info, NSLocalizedString("Starting Refresh.", comment: ""))
-
-        let result = await client.refresh(
-            settings: settings,
-            existingSnapshots: quotesByID
-        )
-        append(logs: result.logs)
-        mergeSnapshots(result.snapshots)
-        lastUpdated = Date()
-        isRefreshing = false
-
-        if result.snapshots.isEmpty && orderedQuotes.isEmpty {
-            addLog(.warning, NSLocalizedString("Refresh Finished With No Quotes.", comment: ""))
-        } else if !result.snapshots.isEmpty {
-            addLog(.info, String(format: NSLocalizedString("Refresh Complete, Updated %d Quotes.", comment: ""), result.snapshots.count))
-        }
-
-        if logEntries.count > 300 {
-            logEntries = Array(logEntries.prefix(300))
-        }
+        await enqueueRefresh(.snapshot(reason: reason))
     }
 
     // MARK: - Mini window
@@ -447,11 +441,7 @@ final class MarketStore: ObservableObject {
     }
 
     var expandedFloatingColumnCount: Int {
-        let availableWidth = CGFloat(settings.floatingWidth) - 20
-        let minimumCardWidth: CGFloat = 150
-        let columnSpacing: CGFloat = 10
-        let columnCount = Int((availableWidth + columnSpacing) / (minimumCardWidth + columnSpacing))
-        return min(max(columnCount, 1), 2)
+        1
     }
 
     var expandedFloatingWidth: CGFloat {
@@ -520,7 +510,7 @@ final class MarketStore: ObservableObject {
 
     private func restartRefreshLoop() {
         refreshTask?.cancel()
-        guard settings.autoRefresh, isTickerWindowVisible, hasEnabledRefreshItems else { return }
+        guard settings.autoRefresh, isTickerWindowVisible, hasPollingRefreshItems else { return }
 
         refreshTask = Task { [weak self] in
             while let self, !Task.isCancelled {
@@ -552,8 +542,12 @@ final class MarketStore: ObservableObject {
         ).sorted { $0.rawValue < $1.rawValue }
     }
 
-    private var hasEnabledRefreshItems: Bool {
-        settings.watchlist.contains(where: { $0.enabled })
+    private var pollingRefreshItems: [WatchItem] {
+        settings.watchlist.filter { $0.enabled && !Self.isStreamingSourceKind($0.sourceKind) }
+    }
+
+    private var hasPollingRefreshItems: Bool {
+        !pollingRefreshItems.isEmpty
     }
 
     private func addLog(_ level: LogLevel, _ message: String) {
@@ -586,6 +580,150 @@ final class MarketStore: ObservableObject {
     private func trimSnapshotsToWatchlist() {
         let validIDs = Set(settings.watchlist.map(\.id))
         quotesByID = quotesByID.filter { validIDs.contains($0.key) }
+    }
+
+    private func handleStreamStateChange(kind: DataSourceKind, state: StreamConnectionState) {
+        let previous = streamStates[kind] ?? .disconnected
+        guard previous != state else { return }
+
+        streamStates[kind] = state
+
+        switch state {
+        case .connected:
+            Task {
+                await enqueueRefresh(.streamFallback(kind: kind, trigger: .connected))
+            }
+
+        case .disconnected:
+            guard previous == .connecting || previous == .connected else { return }
+            Task {
+                await enqueueRefresh(.streamFallback(kind: kind, trigger: .disconnected))
+            }
+
+        case .connecting:
+            break
+        }
+    }
+
+    private func enqueueRefresh(_ request: RefreshRequest) async {
+        if isRefreshing {
+            if !pendingRefreshRequests.contains(request) {
+                pendingRefreshRequests.append(request)
+            }
+            return
+        }
+
+        isRefreshing = true
+        var currentRequest: RefreshRequest? = request
+
+        while let request = currentRequest {
+            await performRefresh(request)
+            currentRequest = pendingRefreshRequests.isEmpty ? nil : pendingRefreshRequests.removeFirst()
+        }
+
+        isRefreshing = false
+    }
+
+    private func performRefresh(_ request: RefreshRequest) async {
+        let items: [WatchItem]
+        let label: String
+        let shouldLogSkip: Bool
+        let shouldLogLifecycle: Bool
+
+        switch request {
+        case let .snapshot(reason):
+            items = pollingRefreshItems
+            label = snapshotRefreshLabel(for: reason)
+            shouldLogSkip = reason == "control-center-general" || reason == "empty-state"
+            shouldLogLifecycle = false
+
+        case let .streamFallback(kind, trigger):
+            items = settings.watchlist.filter { $0.enabled && $0.sourceKind == kind }
+            label = streamRefreshLabel(for: kind, trigger: trigger)
+            shouldLogSkip = false
+            shouldLogLifecycle = true
+        }
+
+        guard !items.isEmpty else {
+            if shouldLogSkip {
+                addLog(.info, String(format: NSLocalizedString("%@ skipped because no eligible items are enabled.", comment: ""), label))
+            }
+            return
+        }
+
+        if shouldLogLifecycle {
+            addLog(.info, String(format: NSLocalizedString("%@ started for %d items.", comment: ""), label, items.count))
+        }
+
+        let result = await client.refresh(
+            items: items,
+            settings: settings,
+            existingSnapshots: quotesByID
+        )
+
+        append(logs: result.logs)
+        mergeSnapshots(result.snapshots)
+        lastUpdated = Date()
+
+        if result.snapshots.isEmpty, shouldLogLifecycle {
+            addLog(.warning, String(format: NSLocalizedString("%@ finished with no quotes.", comment: ""), label))
+        } else if shouldLogLifecycle {
+            addLog(.info, String(format: NSLocalizedString("%@ finished, updated %d quotes.", comment: ""), label, result.snapshots.count))
+        }
+    }
+
+    private func snapshotRefreshLabel(for reason: String) -> String {
+        switch reason {
+        case "launch":
+            return NSLocalizedString("Launch snapshot sync", comment: "")
+        case "ticker-reopened":
+            return NSLocalizedString("Window reopen snapshot sync", comment: "")
+        case "scheduled":
+            return NSLocalizedString("Scheduled snapshot refresh", comment: "")
+        case "control-center-general", "empty-state":
+            return NSLocalizedString("Manual snapshot refresh", comment: "")
+        default:
+            return NSLocalizedString("Snapshot refresh", comment: "")
+        }
+    }
+
+    private func streamRefreshLabel(for kind: DataSourceKind, trigger: StreamSyncTrigger) -> String {
+        let sourceName = streamSourceName(for: kind)
+
+        switch trigger {
+        case .disconnected:
+            return String(
+                format: NSLocalizedString("%@ HTTP fallback sync after WebSocket disconnect", comment: ""),
+                sourceName
+            )
+        case .connected:
+            return String(
+                format: NSLocalizedString("%@ HTTP resync after WebSocket reconnect", comment: ""),
+                sourceName
+            )
+        }
+    }
+
+    private func streamSourceName(for kind: DataSourceKind) -> String {
+        switch kind {
+        case .okxSpot:
+            return "OKX"
+        case .gateSpot:
+            return "Gate"
+        case .binancePerp:
+            return "Binance"
+        default:
+            return kind.title
+        }
+    }
+
+    private static func isStreamingSourceKind(_ kind: DataSourceKind) -> Bool {
+        switch kind {
+        case .okxSpot, .gateSpot, .binancePerp:
+            return true
+        case .baiduGlobalIndex, .sinaGlobalIndex, .okxSpotMarket, .gateSpotMarket, .binanceSpot:
+            return false
+        }
     }
 
     private func resolvedFloatingColorScheme(_ fallback: ColorScheme?) -> ColorScheme {

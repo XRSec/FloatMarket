@@ -87,7 +87,19 @@ struct MarketDataClient {
         settings: AppSettings,
         existingSnapshots: [UUID: QuoteSnapshot] = [:]
     ) async -> MarketRefreshResult {
-        let activeItems = settings.watchlist.filter(\.enabled)
+        await refresh(
+            items: settings.watchlist,
+            settings: settings,
+            existingSnapshots: existingSnapshots
+        )
+    }
+
+    func refresh(
+        items: [WatchItem],
+        settings: AppSettings,
+        existingSnapshots: [UUID: QuoteSnapshot] = [:]
+    ) async -> MarketRefreshResult {
+        let activeItems = items.filter(\.enabled)
         guard !activeItems.isEmpty else {
             return MarketRefreshResult(
                 logs: [LogEntry(level: .warning, message: NSLocalizedString("No Watch Items Are Enabled.", comment: ""))]
