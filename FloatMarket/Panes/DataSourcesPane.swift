@@ -358,7 +358,7 @@ struct WatchlistPane: View {
 
     @ViewBuilder
     private func presetMenu(for source: DataSourceKind) -> some View {
-        Menu(localizedSourceName(source)) {
+        Menu(source.title) {
             ForEach(WatchItemTemplateCatalog.templates(for: source)) { template in
                 Button(template.displayName) {
                     addItem(template)
@@ -370,10 +370,6 @@ struct WatchlistPane: View {
     private func addItem(_ template: WatchItemTemplate) {
         settingsStore.addWatchItem(from: template)
         selection = settingsStore.draftSettings.watchlist.last?.id
-    }
-
-    private func localizedSourceName(_ source: DataSourceKind) -> String {
-        source.title
     }
 
     private func duplicateSelected() {
@@ -421,7 +417,7 @@ private struct WatchlistListRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
-                Text("\(localizedSourceName(item.sourceKind)) · \(item.symbol)")
+                Text("\(item.sourceKind.title) · \(item.symbol)")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -451,10 +447,6 @@ private struct WatchlistListRow: View {
         case .binanceSpot, .binancePerp:
             return Color(red: 0.98, green: 0.72, blue: 0.25)
         }
-    }
-
-    private func localizedSourceName(_ source: DataSourceKind) -> String {
-        source.title
     }
 }
 
@@ -488,7 +480,7 @@ private struct WatchItemDetailEditor: View {
                 HStack(alignment: .top, spacing: 12) {
                     Picker(NSLocalizedString("Source", comment: ""), selection: $item.sourceKind) {
                         ForEach(DataSourceKind.allCases) { source in
-                            Text(localizedSourceName(source)).tag(source)
+                            Text(source.title).tag(source)
                         }
                     }.frame(maxWidth: 300)
 
@@ -677,10 +669,6 @@ private struct WatchItemDetailEditor: View {
         .onChange(of: item.symbol) { _ in
             sanitizeCustomTradingTimes()
         }
-    }
-
-    private func localizedSourceName(_ source: DataSourceKind) -> String {
-        source.title
     }
 
     private var availableTemplates: [WatchItemTemplate] {

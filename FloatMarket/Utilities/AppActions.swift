@@ -18,7 +18,6 @@ enum AppActions {
         } else {
             UserDefaults.standard.set([code], forKey: "AppleLanguages")
         }
-        UserDefaults.standard.synchronize()
 
         let url = Bundle.main.bundleURL
         let task = Process()

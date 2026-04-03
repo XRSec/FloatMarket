@@ -24,43 +24,15 @@ extension MarketDataClient {
 
                     case let .success(data, baseURL):
                         do {
-                            if isSpot {
-                                let response = try JSONDecoder().decode([GateSpotTicker].self, from: data)
-                                guard let ticker = response.first else {
-                                    return SourceFetchResult(
-                                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Gate Returned Empty Data: %@.", comment: ""), item.symbol))]
-                                    )
-                                }
-
-                                let last = Double(ticker.last)
-                                let percent = Double(ticker.change_percentage)
-                                let previous = (percent ?? 0) == -100 ? nil : (last ?? 0) / (1 + (percent ?? 0) / 100)
-                                let change = (last ?? 0) - (previous ?? 0)
-
-                                let snapshot = QuoteSnapshot(
-                                    id: item.id,
-                                    item: item,
-                                    price: last,
-                                    change: change,
-                                    changePercent: percent,
-                                    sourceLabel: item.sourceKind.title,
-                                    marketStatus: nil,
-                                    fetchedAt: Date(),
-                                    usedBaseURL: baseURL
-                                )
-
-                                return SourceFetchResult(snapshots: [snapshot])
-                            }
-
-                            let response = try JSONDecoder().decode([GateFuturesTicker].self, from: data)
-                            guard let ticker = response.first else {
+                            let (lastStr, percentStr) = try Self.decodeGateTicker(data: data, isSpot: isSpot)
+                            guard let lastStr, let percentStr else {
                                 return SourceFetchResult(
                                     logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Gate Returned Empty Data: %@.", comment: ""), item.symbol))]
                                 )
                             }
 
-                            let last = Double(ticker.last)
-                            let percent = Double(ticker.change_percentage)
+                            let last = Double(lastStr)
+                            let percent = Double(percentStr)
                             let previous = (percent ?? 0) == -100 ? nil : (last ?? 0) / (1 + (percent ?? 0) / 100)
                             let change = (last ?? 0) - (previous ?? 0)
 
@@ -71,11 +43,10 @@ extension MarketDataClient {
                                 change: change,
                                 changePercent: percent,
                                 sourceLabel: item.sourceKind.title,
-                                marketStatus: NSLocalizedString("Perpetual", comment: ""),
+                                marketStatus: isSpot ? nil : NSLocalizedString("Perpetual", comment: ""),
                                 fetchedAt: Date(),
                                 usedBaseURL: baseURL
                             )
-
                             return SourceFetchResult(snapshots: [snapshot])
                         } catch {
                             return SourceFetchResult(
@@ -93,6 +64,16 @@ extension MarketDataClient {
         }
 
         return combined
+    }
+
+    private static func decodeGateTicker(data: Data, isSpot: Bool) throws -> (last: String?, changePercent: String?) {
+        if isSpot {
+            let tickers = try JSONDecoder().decode([GateSpotTicker].self, from: data)
+            return (tickers.first?.last, tickers.first?.change_percentage)
+        } else {
+            let tickers = try JSONDecoder().decode([GateFuturesTicker].self, from: data)
+            return (tickers.first?.last, tickers.first?.change_percentage)
+        }
     }
 }
 
@@ -267,7 +248,9 @@ extension MarketStreamController {
                 }
             }
 
-            await snapshotHandler(snapshots, [])
+            if !snapshots.isEmpty {
+                await snapshotHandler(snapshots, [])
+            }
         }
     }
 }

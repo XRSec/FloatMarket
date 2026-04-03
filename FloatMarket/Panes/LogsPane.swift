@@ -5,16 +5,14 @@ struct LogsPane: View {
     @State private var selectedLevel: LogLevel?
     @State private var selectedLogIDs = Set<LogEntry.ID>()
 
-    private var infoCount: Int {
-        store.logEntries.filter { $0.level == .info }.count
-    }
-
-    private var warningCount: Int {
-        store.logEntries.filter { $0.level == .warning }.count
-    }
-
-    private var errorCount: Int {
-        store.logEntries.filter { $0.level == .error }.count
+    private var logCounts: (info: Int, warning: Int, error: Int) {
+        store.logEntries.reduce(into: (info: 0, warning: 0, error: 0)) { counts, entry in
+            switch entry.level {
+            case .info:    counts.info += 1
+            case .warning: counts.warning += 1
+            case .error:   counts.error += 1
+            }
+        }
     }
 
     private var filteredEntries: [LogEntry] {
@@ -26,6 +24,7 @@ struct LogsPane: View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 HStack(spacing: 12) {
+                    let counts = logCounts
                     logMetricButton(
                         title: NSLocalizedString("Total", comment: ""),
                         value: "\(store.logEntries.count)",
@@ -36,7 +35,7 @@ struct LogsPane: View {
                     }
                     logMetricButton(
                         title: NSLocalizedString("Info", comment: ""),
-                        value: "\(infoCount)",
+                        value: "\(counts.info)",
                         tint: Color(red: 0.34, green: 0.73, blue: 0.98),
                         isSelected: selectedLevel == .info
                     ) {
@@ -44,7 +43,7 @@ struct LogsPane: View {
                     }
                     logMetricButton(
                         title: NSLocalizedString("Warnings", comment: ""),
-                        value: "\(warningCount)",
+                        value: "\(counts.warning)",
                         tint: Color(red: 0.98, green: 0.72, blue: 0.25),
                         isSelected: selectedLevel == .warning
                     ) {
@@ -52,7 +51,7 @@ struct LogsPane: View {
                     }
                     logMetricButton(
                         title: NSLocalizedString("Errors", comment: ""),
-                        value: "\(errorCount)",
+                        value: "\(counts.error)",
                         tint: Color(red: 0.96, green: 0.37, blue: 0.35),
                         isSelected: selectedLevel == .error
                     ) {

@@ -75,9 +75,7 @@ final class MarketStore: ObservableObject {
             await refreshNow(reason: "launch")
         }
         restartRefreshLoop()
-        Task { @MainActor [weak self] in
-            self?.showTickerWindow()
-        }
+        showTickerWindow()
         observeSettingsChanges()
     }
 
@@ -140,11 +138,7 @@ final class MarketStore: ObservableObject {
             refreshTask?.cancel()
             refreshTask = nil
             streams.stop()
-            streamStates = [
-                .okxSpot: .disconnected,
-                .gateSpot: .disconnected,
-                .binancePerp: .disconnected
-            ]
+            streamStates = Self.disconnectedStreamStates
             showsAllGlobalIndices = false
             updateFloatingWindowState(isCollapsed: false, dockSide: .none)
         }
@@ -160,49 +154,29 @@ final class MarketStore: ObservableObject {
 
     // MARK: - Status
 
+    private var streamHealth: (activeKinds: [DataSourceKind], disconnectedCount: Int) {
+        let active = activeStreamingKinds
+        let disconnected = active.filter { streamStates[$0] != .connected }.count
+        return (active, disconnected)
+    }
+
     var statusSymbolName: String {
-        if !isTickerWindowVisible {
-            return "pause.circle.fill"
-        }
-        if isRefreshing {
-            return "arrow.triangle.2.circlepath"
-        }
-
-        let activeKinds = activeStreamingKinds
-        guard !activeKinds.isEmpty else {
-            return "circle.lefthalf.filled"
-        }
-
-        let disconnectedCount = activeKinds.filter { streamStates[$0] != .connected }.count
-        if disconnectedCount == 0 {
-            return "checkmark.circle.fill"
-        }
-        if disconnectedCount < activeKinds.count {
-            return "exclamationmark.triangle.fill"
-        }
+        if !isTickerWindowVisible { return "pause.circle.fill" }
+        if isRefreshing { return "arrow.triangle.2.circlepath" }
+        let (active, disconnected) = streamHealth
+        guard !active.isEmpty else { return "circle.lefthalf.filled" }
+        if disconnected == 0 { return "checkmark.circle.fill" }
+        if disconnected < active.count { return "exclamationmark.triangle.fill" }
         return "xmark.octagon.fill"
     }
 
     var statusSymbolColor: Color {
-        if !isTickerWindowVisible {
-            return Color(nsColor: .secondaryLabelColor)
-        }
-        if isRefreshing {
-            return Color(red: 0.98, green: 0.72, blue: 0.25)
-        }
-
-        let activeKinds = activeStreamingKinds
-        guard !activeKinds.isEmpty else {
-            return Color(nsColor: .secondaryLabelColor)
-        }
-
-        let disconnectedCount = activeKinds.filter { streamStates[$0] != .connected }.count
-        if disconnectedCount == 0 {
-            return Color(red: 0.27, green: 0.83, blue: 0.54)
-        }
-        if disconnectedCount < activeKinds.count {
-            return Color(red: 0.98, green: 0.72, blue: 0.25)
-        }
+        if !isTickerWindowVisible { return Color(nsColor: .secondaryLabelColor) }
+        if isRefreshing { return Color(red: 0.98, green: 0.72, blue: 0.25) }
+        let (active, disconnected) = streamHealth
+        guard !active.isEmpty else { return Color(nsColor: .secondaryLabelColor) }
+        if disconnected == 0 { return Color(red: 0.27, green: 0.83, blue: 0.54) }
+        if disconnected < active.count { return Color(red: 0.98, green: 0.72, blue: 0.25) }
         return Color(red: 0.96, green: 0.37, blue: 0.35)
     }
 
@@ -210,32 +184,18 @@ final class MarketStore: ObservableObject {
         if isRefreshing {
             return NSLocalizedString("Refreshing", comment: "")
         }
-
         guard let lastUpdated else {
             return NSLocalizedString("Waiting For First Sync", comment: "")
         }
-
         return "Updated \(Self.timeFormatter.string(from: lastUpdated))"
     }
 
     var popupStatusText: String {
-        if !isTickerWindowVisible {
-            return NSLocalizedString("Paused", comment: "")
-        }
-        if isRefreshing {
-            return NSLocalizedString("Refreshing", comment: "")
-        }
-
-        let activeKinds = activeStreamingKinds
-        guard !activeKinds.isEmpty else {
-            return NSLocalizedString("Running", comment: "")
-        }
-
-        let disconnectedCount = activeKinds.filter { streamStates[$0] != .connected }.count
-        if disconnectedCount == 0 {
-            return NSLocalizedString("Running", comment: "")
-        }
-        return NSLocalizedString("Issue", comment: "")
+        if !isTickerWindowVisible { return NSLocalizedString("Paused", comment: "") }
+        if isRefreshing { return NSLocalizedString("Refreshing", comment: "") }
+        let (active, disconnected) = streamHealth
+        guard !active.isEmpty else { return NSLocalizedString("Running", comment: "") }
+        return disconnected == 0 ? NSLocalizedString("Running", comment: "") : NSLocalizedString("Issue", comment: "")
     }
 
     var footerStatusText: String {
@@ -244,21 +204,11 @@ final class MarketStore: ObservableObject {
     }
 
     var menuBarStatusText: String {
-        if !isTickerWindowVisible {
-            return NSLocalizedString("Paused", comment: "")
-        }
-        let activeKinds = activeStreamingKinds
-        guard !activeKinds.isEmpty else {
-            return NSLocalizedString("Polling", comment: "")
-        }
-
-        let disconnectedCount = activeKinds.filter { streamStates[$0] != .connected }.count
-        if disconnectedCount == 0 {
-            return NSLocalizedString("Healthy", comment: "")
-        }
-        if disconnectedCount < activeKinds.count {
-            return NSLocalizedString("Degraded", comment: "")
-        }
+        if !isTickerWindowVisible { return NSLocalizedString("Paused", comment: "") }
+        let (active, disconnected) = streamHealth
+        guard !active.isEmpty else { return NSLocalizedString("Polling", comment: "") }
+        if disconnected == 0 { return NSLocalizedString("Healthy", comment: "") }
+        if disconnected < active.count { return NSLocalizedString("Degraded", comment: "") }
         return NSLocalizedString("Critical", comment: "")
     }
 
@@ -266,12 +216,12 @@ final class MarketStore: ObservableObject {
         if !isTickerWindowVisible {
             return NSLocalizedString("Floating window is closed. Active fetching is paused.", comment: "")
         }
-        let activeKinds = activeStreamingKinds
-        guard !activeKinds.isEmpty else {
+        let (active, disconnected) = streamHealth
+        guard !active.isEmpty else {
             return NSLocalizedString("No realtime stream is enabled.", comment: "")
         }
-        let connectedCount = activeKinds.filter { streamStates[$0] == .connected }.count
-        return "\(connectedCount) / \(activeKinds.count) streams connected"
+        let connectedCount = active.count - disconnected
+        return "\(connectedCount) / \(active.count) streams connected"
     }
 
     // MARK: - Logs
@@ -551,17 +501,16 @@ final class MarketStore: ObservableObject {
     }
 
     private func addLog(_ level: LogLevel, _ message: String) {
-        logEntries.insert(LogEntry(level: level, message: message), at: 0)
+        append(logs: [LogEntry(level: level, message: message)])
     }
 
     private func append(logs: [LogEntry]) {
         guard !logs.isEmpty else { return }
-        for log in logs.reversed() {
-            logEntries.insert(log, at: 0)
+        var merged = logs.reversed() + logEntries
+        if merged.count > 300 {
+            merged = Array(merged.prefix(300))
         }
-        if logEntries.count > 300 {
-            logEntries = Array(logEntries.prefix(300))
-        }
+        logEntries = merged
     }
 
     private func mergeSnapshots(_ snapshots: [QuoteSnapshot]) {
@@ -663,7 +612,6 @@ final class MarketStore: ObservableObject {
 
         append(logs: result.logs)
         mergeSnapshots(result.snapshots)
-        lastUpdated = Date()
 
         if result.snapshots.isEmpty, shouldLogLifecycle {
             addLog(.warning, String(format: NSLocalizedString("%@ finished with no quotes.", comment: ""), label))
@@ -802,6 +750,12 @@ final class MarketStore: ObservableObject {
         old.binanceConfig != new.binanceConfig ||
         old.watchlist != new.watchlist
     }
+
+    private static let disconnectedStreamStates: [DataSourceKind: StreamConnectionState] = [
+        .okxSpot: .disconnected,
+        .gateSpot: .disconnected,
+        .binancePerp: .disconnected
+    ]
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()

@@ -27,8 +27,8 @@ struct MainScene: Scene {
 
 private struct MenuBarAppIcon: View {
     var body: some View {
-        if let iconImage = menuBarImage {
-            Image(nsImage: iconImage)
+        if let image = Self.menuBarImage {
+            Image(nsImage: image)
                 .resizable()
                 .frame(width: 16, height: 16)
         } else {
@@ -36,11 +36,11 @@ private struct MenuBarAppIcon: View {
         }
     }
 
-    private var menuBarImage: NSImage? {
+    private static let menuBarImage: NSImage? = {
         guard let image = NSApp.applicationIconImage.copy() as? NSImage else {
             return nil
         }
         image.size = NSSize(width: 16, height: 16)
         return image
-    }
+    }()
 }

@@ -62,7 +62,7 @@ struct Sidebar: View {
                     .frame(width: 18)
                     .foregroundStyle(selection == item ? Color.accentColor : .secondary)
 
-                Text(localizedTitle(for: item))
+                Text(item.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
 
@@ -111,20 +111,5 @@ struct Sidebar: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial)
-    }
-
-    private func localizedTitle(for item: SettingsSection) -> String {
-        switch item {
-        case .general:
-            return NSLocalizedString("General", comment: "")
-        case .dataSources:
-            return NSLocalizedString("Data Sources", comment: "")
-        case .watchlist:
-            return NSLocalizedString("Watchlist", comment: "")
-        case .appearance:
-            return NSLocalizedString("Appearance", comment: "")
-        case .logs:
-            return NSLocalizedString("Logs", comment: "")
-        }
     }
 }

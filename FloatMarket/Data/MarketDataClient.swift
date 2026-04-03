@@ -84,17 +84,6 @@ enum NetworkLogFormatter {
 
 struct MarketDataClient {
     func refresh(
-        settings: AppSettings,
-        existingSnapshots: [UUID: QuoteSnapshot] = [:]
-    ) async -> MarketRefreshResult {
-        await refresh(
-            items: settings.watchlist,
-            settings: settings,
-            existingSnapshots: existingSnapshots
-        )
-    }
-
-    func refresh(
         items: [WatchItem],
         settings: AppSettings,
         existingSnapshots: [UUID: QuoteSnapshot] = [:]
