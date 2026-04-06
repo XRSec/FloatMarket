@@ -293,10 +293,28 @@ final class MarketStore: ObservableObject {
 
     var miniWindowSnapshots: [QuoteSnapshot] {
         let selected = settings.miniWindowItemIDs.compactMap { quotesByID[$0] }
+        let filtered: [QuoteSnapshot]
         if !selected.isEmpty {
-            return selected
+            // Filter out global indices that are not trading, opening soon, or recently closed
+            filtered = selected.filter { snapshot in
+                guard snapshot.item.sourceKind.instrumentKind == .globalIndex else {
+                    // Non-index items (crypto) are always shown
+                    return true
+                }
+                let timing = timing(for: snapshot.item)
+                return timing.isTrading || timing.isOpeningWithinHour || timing.isRecentlyClosedWithinHour
+            }
+        } else {
+            // Fallback to first item from orderedQuotes, also applying the same filter
+            filtered = orderedQuotes.prefix(1).filter { snapshot in
+                guard snapshot.item.sourceKind.instrumentKind == .globalIndex else {
+                    return true
+                }
+                let timing = timing(for: snapshot.item)
+                return timing.isTrading || timing.isOpeningWithinHour || timing.isRecentlyClosedWithinHour
+            }
         }
-        return orderedQuotes.prefix(1).map { $0 }
+        return filtered
     }
 
     var miniWindowSelectionItems: [WatchItem] {
@@ -714,15 +732,20 @@ final class MarketStore: ObservableObject {
 
         var sectionHeights: [CGFloat] = []
         if !allIndexRows.isEmpty {
-            let rowCount = ceil(CGFloat(displayedIndexRows.count) / columnCount)
             let gridHeight: CGFloat
+            let effectiveHeaderBottomSpacing: CGFloat
             if displayedIndexRows.isEmpty {
+                // When collapsed (no displayed rows), don't add bottom spacing since there's no grid content
                 gridHeight = 0
+                effectiveHeaderBottomSpacing = 0
             } else {
+                // When expanded or has highlighted indices, calculate actual grid height
+                let rowCount = ceil(CGFloat(displayedIndexRows.count) / columnCount)
                 gridHeight = rowCount * rowHeight + CGFloat(max(Int(rowCount) - 1, 0)) * gridRowSpacing
+                effectiveHeaderBottomSpacing = headerBottomSpacing
             }
             // The indices section stays visible with its header and toggle even when rows are collapsed away.
-            sectionHeights.append(sectionHeaderHeight + headerBottomSpacing + gridHeight)
+            sectionHeights.append(sectionHeaderHeight + effectiveHeaderBottomSpacing + gridHeight)
         }
         if !spotRows.isEmpty {
             let rowCount = ceil(CGFloat(spotRows.count) / columnCount)
