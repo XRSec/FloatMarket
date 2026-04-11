@@ -116,6 +116,7 @@ extension MarketStreamController {
                 try await connectGate(
                     urlString: currentURL,
                     symbolMap: symbolMap,
+                    useProxy: config.useProxy,
                     snapshotHandler: snapshotHandler,
                     stateHandler: stateHandler,
                     settings: settings
@@ -136,6 +137,7 @@ extension MarketStreamController {
     static func connectGate(
         urlString: String,
         symbolMap: [String: [WatchItem]],
+        useProxy: Bool,
         snapshotHandler: @escaping SnapshotHandler,
         stateHandler: @escaping StateHandler,
         settings: AppSettings
@@ -147,7 +149,7 @@ extension MarketStreamController {
         await stateHandler(.gateSpot, .connecting)
         await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Connecting To Gate WebSocket: %@", comment: ""), urlString))])
 
-        let session = NetworkSessionFactory.makeSession(settings: settings)
+        let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
         let task = session.webSocketTask(with: url)
         task.resume()
 

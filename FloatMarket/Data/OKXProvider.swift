@@ -106,6 +106,7 @@ extension MarketStreamController {
                 try await connectOKX(
                     urlString: currentURL,
                     symbolMap: symbolMap,
+                    useProxy: config.useProxy,
                     snapshotHandler: snapshotHandler,
                     stateHandler: stateHandler,
                     settings: settings
@@ -126,6 +127,7 @@ extension MarketStreamController {
     static func connectOKX(
         urlString: String,
         symbolMap: [String: [WatchItem]],
+        useProxy: Bool,
         snapshotHandler: @escaping SnapshotHandler,
         stateHandler: @escaping StateHandler,
         settings: AppSettings
@@ -137,7 +139,7 @@ extension MarketStreamController {
         await stateHandler(.okxSpot, .connecting)
         await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Connecting To OKX WebSocket: %@", comment: ""), urlString))])
 
-        let session = NetworkSessionFactory.makeSession(settings: settings)
+        let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
         let task = session.webSocketTask(with: url)
         task.resume()
 

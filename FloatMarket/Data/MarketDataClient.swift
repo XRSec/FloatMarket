@@ -2,31 +2,40 @@ import CFNetwork
 import Foundation
 
 enum NetworkSessionFactory {
-    static func makeSession(settings: AppSettings) -> URLSession {
+    static func makeSession(settings: AppSettings, useProxy: Bool = false) -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
 
-        if settings.proxyEnabled {
-            switch settings.proxyType {
-            case .http:
-                configuration.connectionProxyDictionary = [
-                    kCFNetworkProxiesHTTPEnable as AnyHashable: 1,
-                    kCFNetworkProxiesHTTPProxy as AnyHashable: settings.proxyHost,
-                    kCFNetworkProxiesHTTPPort as AnyHashable: settings.proxyPort,
-                    kCFNetworkProxiesHTTPSEnable as AnyHashable: 1,
-                    kCFNetworkProxiesHTTPSProxy as AnyHashable: settings.proxyHost,
-                    kCFNetworkProxiesHTTPSPort as AnyHashable: settings.proxyPort
-                ]
-            case .socks5:
-                configuration.connectionProxyDictionary = [
-                    kCFNetworkProxiesSOCKSEnable as AnyHashable: 1,
-                    kCFNetworkProxiesSOCKSProxy as AnyHashable: settings.proxyHost,
-                    kCFNetworkProxiesSOCKSPort as AnyHashable: settings.proxyPort
-                ]
-            }
+        if useProxy, let proxyDictionary = makeProxyDictionary(settings: settings) {
+            configuration.connectionProxyDictionary = proxyDictionary
         }
 
         return URLSession(configuration: configuration)
+    }
+
+    private static func makeProxyDictionary(settings: AppSettings) -> [AnyHashable: Any]? {
+        let host = settings.proxyHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty, settings.proxyPort > 0 else {
+            return nil
+        }
+
+        switch settings.proxyType {
+        case .http:
+            return [
+                kCFNetworkProxiesHTTPEnable as AnyHashable: 1,
+                kCFNetworkProxiesHTTPProxy as AnyHashable: host,
+                kCFNetworkProxiesHTTPPort as AnyHashable: settings.proxyPort,
+                kCFNetworkProxiesHTTPSEnable as AnyHashable: 1,
+                kCFNetworkProxiesHTTPSProxy as AnyHashable: host,
+                kCFNetworkProxiesHTTPSPort as AnyHashable: settings.proxyPort
+            ]
+        case .socks5:
+            return [
+                kCFNetworkProxiesSOCKSEnable as AnyHashable: 1,
+                kCFNetworkProxiesSOCKSProxy as AnyHashable: host,
+                kCFNetworkProxiesSOCKSPort as AnyHashable: settings.proxyPort
+            ]
+        }
     }
 }
 
@@ -153,6 +162,7 @@ struct MarketDataClient {
                     queryItems: queryItems,
                     timeout: config.timeout,
                     settings: settings,
+                    useProxy: config.useProxy,
                     headers: headers
                 )
                 return .success(data: data, baseURL: responseURL)
@@ -178,6 +188,7 @@ struct MarketDataClient {
         queryItems: [URLQueryItem],
         timeout: Double,
         settings: AppSettings,
+        useProxy: Bool,
         headers: [String: String]
     ) async throws -> (Data, String) {
         guard let url = buildURL(baseURL: baseURL, path: path, queryItems: queryItems) else {
@@ -192,7 +203,7 @@ struct MarketDataClient {
             request.setValue(value, forHTTPHeaderField: field)
         }
 
-        let session = NetworkSessionFactory.makeSession(settings: settings)
+        let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
         defer { session.invalidateAndCancel() }
 
         let (data, response) = try await session.data(for: request)
@@ -234,6 +245,7 @@ final class MarketStreamController {
     private let snapshotHandler: SnapshotHandler
     private let stateHandler: StateHandler
 
+    private var baiduTask: Task<Void, Never>?
     private var okxTask: Task<Void, Never>?
     private var gateTask: Task<Void, Never>?
     private var binanceTask: Task<Void, Never>?
@@ -246,9 +258,24 @@ final class MarketStreamController {
     func update(with settings: AppSettings) {
         stop()
 
+        let baiduItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .baiduGlobalIndex }
         let okxItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .okxSpot }
         let gateItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .gateSpot }
         let binanceItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .binancePerp }
+
+        if !baiduItems.isEmpty {
+            baiduTask = Task {
+                await Self.runBaiduStream(
+                    items: baiduItems,
+                    config: settings.baiduConfig,
+                    snapshotHandler: snapshotHandler,
+                    stateHandler: stateHandler,
+                    settings: settings
+                )
+            }
+        } else {
+            Task { await stateHandler(.baiduGlobalIndex, .disconnected) }
+        }
 
         if !okxItems.isEmpty {
             okxTask = Task {
@@ -294,9 +321,11 @@ final class MarketStreamController {
     }
 
     func stop() {
+        baiduTask?.cancel()
         okxTask?.cancel()
         gateTask?.cancel()
         binanceTask?.cancel()
+        baiduTask = nil
         okxTask = nil
         gateTask = nil
         binanceTask = nil

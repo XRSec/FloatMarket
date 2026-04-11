@@ -418,6 +418,16 @@ struct EndpointConfiguration: Codable, Equatable {
     var timeout: Double = 8
     var primaryWebSocketURL: String = ""
     var backupWebSocketURL: String = ""
+    var useProxy = false
+
+    enum CodingKeys: String, CodingKey {
+        case primaryURL
+        case backupURL
+        case timeout
+        case primaryWebSocketURL
+        case backupWebSocketURL
+        case useProxy
+    }
 
     var candidateBaseURLs: [String] {
         [primaryURL, backupURL]
@@ -966,7 +976,10 @@ struct AppSettings: Codable, Equatable {
     var proxyHost = "127.0.0.1"
     var proxyPort = 7890
     var proxyTestURL = "https://www.gstatic.com/generate_204"
-    var baiduConfig = EndpointConfiguration(primaryURL: "https://finance.pae.baidu.com")
+    var baiduConfig = EndpointConfiguration(
+        primaryURL: "https://finance.pae.baidu.com",
+        primaryWebSocketURL: "wss://finance-ws.pae.baidu.com"
+    )
     var sinaConfig = EndpointConfiguration(primaryURL: "https://w.sinajs.cn")
     var okxConfig = EndpointConfiguration(
         primaryURL: "https://www.okx.com",
@@ -1059,11 +1072,11 @@ struct AppSettings: Codable, Equatable {
         proxyPort = try container.decodeIfPresent(Int.self, forKey: .proxyPort) ?? proxyPort
         let decodedProxyTestURL = try container.decodeIfPresent(String.self, forKey: .proxyTestURL) ?? proxyTestURL
         proxyTestURL = Self.normalizedProxyTestURL(decodedProxyTestURL)
-        baiduConfig = try container.decodeIfPresent(EndpointConfiguration.self, forKey: .baiduConfig) ?? baiduConfig
-        sinaConfig = try container.decodeIfPresent(EndpointConfiguration.self, forKey: .sinaConfig) ?? sinaConfig
-        okxConfig = try container.decodeIfPresent(EndpointConfiguration.self, forKey: .okxConfig) ?? okxConfig
-        gateConfig = try container.decodeIfPresent(EndpointConfiguration.self, forKey: .gateConfig) ?? gateConfig
-        binanceConfig = try container.decodeIfPresent(EndpointConfiguration.self, forKey: .binanceConfig) ?? binanceConfig
+        baiduConfig = try decodeEndpointConfiguration(from: container, key: .baiduConfig, fallback: baiduConfig, legacyProxyEnabled: proxyEnabled)
+        sinaConfig = try decodeEndpointConfiguration(from: container, key: .sinaConfig, fallback: sinaConfig, legacyProxyEnabled: proxyEnabled)
+        okxConfig = try decodeEndpointConfiguration(from: container, key: .okxConfig, fallback: okxConfig, legacyProxyEnabled: proxyEnabled)
+        gateConfig = try decodeEndpointConfiguration(from: container, key: .gateConfig, fallback: gateConfig, legacyProxyEnabled: proxyEnabled)
+        binanceConfig = try decodeEndpointConfiguration(from: container, key: .binanceConfig, fallback: binanceConfig, legacyProxyEnabled: proxyEnabled)
         watchlist = try container.decodeIfPresent([WatchItem].self, forKey: .watchlist) ?? watchlist
         watchlist = watchlist.map { item in
             guard item.customURL == nil,
@@ -1089,6 +1102,22 @@ struct AppSettings: Codable, Equatable {
         }
 
         return trimmed
+    }
+
+    private func decodeEndpointConfiguration(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys,
+        fallback: EndpointConfiguration,
+        legacyProxyEnabled: Bool
+    ) throws -> EndpointConfiguration {
+        guard container.contains(key) else { return fallback }
+
+        var decoded = try container.decodeIfPresent(EndpointConfiguration.self, forKey: key) ?? fallback
+        let nested = try container.nestedContainer(keyedBy: EndpointConfiguration.CodingKeys.self, forKey: key)
+        if !nested.contains(.useProxy) {
+            decoded.useProxy = legacyProxyEnabled
+        }
+        return decoded
     }
 }
 

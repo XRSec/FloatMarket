@@ -155,6 +155,7 @@
 "Time" = "时间";
 "Timeout" = "超时";
 "Timeout triggers fallback to backup endpoints." = "超时后会自动切换到备用地址。";
+"Use Proxy" = "使用代理";
 "Times follow exchange local time with hour and half-hour options." = "按交易所当地时间填写，默认提供整点和半点。";
 "Total" = "总数";
 "Trading Session" = "交易时间";
@@ -171,6 +172,8 @@
 "Baidu Gushitong [%@] Decode Failed: %@" = "百度股市通[%@] 解码失败: %@";
 "Baidu Gushitong [%@] Did Not Return %@ (%@)." = "百度股市通[%@] 未返回 %@ (%@)。";
 "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items." = "百度股市通[%@] 刷新成功，命中 %d 条。";
+"Baidu Gushitong WebSocket Subscribed %d Symbols." = "百度股市通 WebSocket 已订阅 %d 个指数。";
+"Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP." = "百度股市通 WebSocket URL 未配置，已回退到 HTTP。";
 "BTC Perpetual" = "BTC 永续";
 "Binance Decode Failed [%@]: %@" = "Binance 解码失败[%@]: %@";
 "Binance Refresh Succeeded: %@." = "Binance 刷新成功: %@。";
@@ -180,6 +183,7 @@
 "Closed" = "已收盘";
 "Closed %d Min Ago" = "刚收盘 %d 分";
 "Connecting To Binance WebSocket: %@" = "连接 Binance WebSocket: %@";
+"Connecting To Baidu Gushitong WebSocket: %@" = "连接百度股市通 WebSocket: %@";
 "Connecting To Gate WebSocket: %@" = "连接 Gate WebSocket: %@";
 "Connecting To OKX WebSocket: %@" = "连接 OKX WebSocket: %@";
 "ETH Perpetual" = "ETH 永续";

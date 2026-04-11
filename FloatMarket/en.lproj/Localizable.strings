@@ -155,6 +155,7 @@
 "Time" = "Time";
 "Timeout" = "Timeout";
 "Timeout triggers fallback to backup endpoints." = "Timeout triggers fallback to backup endpoints.";
+"Use Proxy" = "Use Proxy";
 "Times follow exchange local time with hour and half-hour options." = "Times follow exchange local time with hour and half-hour options.";
 "Total" = "Total";
 "Trading Session" = "Trading Session";
@@ -171,6 +172,8 @@
 "Baidu Gushitong [%@] Decode Failed: %@" = "Baidu Gushitong [%@] Decode Failed: %@";
 "Baidu Gushitong [%@] Did Not Return %@ (%@)." = "Baidu Gushitong [%@] Did Not Return %@ (%@).";
 "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items." = "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.";
+"Baidu Gushitong WebSocket Subscribed %d Symbols." = "Baidu Gushitong WebSocket Subscribed %d Symbols.";
+"Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP." = "Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP.";
 "BTC Perpetual" = "BTC Perpetual";
 "Binance Decode Failed [%@]: %@" = "Binance Decode Failed [%@]: %@";
 "Binance Refresh Succeeded: %@." = "Binance Refresh Succeeded: %@.";
@@ -180,6 +183,7 @@
 "Closed" = "Closed";
 "Closed %d Min Ago" = "Closed %d Min Ago";
 "Connecting To Binance WebSocket: %@" = "Connecting To Binance WebSocket: %@";
+"Connecting To Baidu Gushitong WebSocket: %@" = "Connecting To Baidu Gushitong WebSocket: %@";
 "Connecting To Gate WebSocket: %@" = "Connecting To Gate WebSocket: %@";
 "Connecting To OKX WebSocket: %@" = "Connecting To OKX WebSocket: %@";
 "ETH Perpetual" = "ETH Perpetual";

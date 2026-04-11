@@ -57,8 +57,18 @@ final class SettingsStore: ObservableObject {
 
     func draftWatchItemBinding(at index: Int) -> Binding<WatchItem> {
         Binding(
-            get: { self.draftSettings.watchlist[index] },
-            set: { self.draftSettings.watchlist[index] = $0 }
+            get: {
+                guard self.draftSettings.watchlist.indices.contains(index) else {
+                    // 返回第一个项目作为后备（如果列表不为空）
+                    // 这种情况理论上不应该发生，因为视图层应该已经做了检查
+                    return self.draftSettings.watchlist.first!
+                }
+                return self.draftSettings.watchlist[index]
+            },
+            set: {
+                guard self.draftSettings.watchlist.indices.contains(index) else { return }
+                self.draftSettings.watchlist[index] = $0
+            }
         )
     }
 

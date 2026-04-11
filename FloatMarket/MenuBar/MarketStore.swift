@@ -39,6 +39,7 @@ final class MarketStore: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var logEntries: [LogEntry] = []
     @Published private(set) var streamStates: [DataSourceKind: StreamConnectionState] = [
+        .baiduGlobalIndex: .disconnected,
         .okxSpot: .disconnected,
         .gateSpot: .disconnected,
         .binancePerp: .disconnected
@@ -254,7 +255,7 @@ final class MarketStore: ObservableObject {
         }
 
         do {
-            let session = NetworkSessionFactory.makeSession(settings: s)
+            let session = NetworkSessionFactory.makeSession(settings: s, useProxy: true)
             defer { session.invalidateAndCancel() }
 
             var request = URLRequest(url: url)
@@ -504,14 +505,14 @@ final class MarketStore: ObservableObject {
         Array(
             Set(
                 settings.watchlist
-                    .filter { $0.enabled && ($0.sourceKind == .okxSpot || $0.sourceKind == .gateSpot || $0.sourceKind == .binancePerp) }
+                    .filter { $0.enabled && Self.isStreamingWatchItem($0) }
                     .map(\.sourceKind)
             )
         ).sorted { $0.rawValue < $1.rawValue }
     }
 
     private var pollingRefreshItems: [WatchItem] {
-        settings.watchlist.filter { $0.enabled && !Self.isStreamingSourceKind($0.sourceKind) }
+        settings.watchlist.filter { $0.enabled && !Self.isStreamingWatchItem($0) }
     }
 
     private var hasPollingRefreshItems: Bool {
@@ -683,11 +684,13 @@ final class MarketStore: ObservableObject {
         }
     }
 
-    private static func isStreamingSourceKind(_ kind: DataSourceKind) -> Bool {
-        switch kind {
+    private static func isStreamingWatchItem(_ item: WatchItem) -> Bool {
+        switch item.sourceKind {
+        case .baiduGlobalIndex:
+            return true
         case .okxSpot, .gateSpot, .binancePerp:
             return true
-        case .baiduGlobalIndex, .sinaGlobalIndex, .okxSpotMarket, .gateSpotMarket, .binanceSpot:
+        case .sinaGlobalIndex, .okxSpotMarket, .gateSpotMarket, .binanceSpot:
             return false
         }
     }
@@ -775,6 +778,7 @@ final class MarketStore: ObservableObject {
     }
 
     private static let disconnectedStreamStates: [DataSourceKind: StreamConnectionState] = [
+        .baiduGlobalIndex: .disconnected,
         .okxSpot: .disconnected,
         .gateSpot: .disconnected,
         .binancePerp: .disconnected
