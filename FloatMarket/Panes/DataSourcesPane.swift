@@ -30,6 +30,21 @@ private struct DataSourceStateLabel: View {
 struct DataSourcesPane: View {
     @EnvironmentObject private var settingsStore: SettingsStore
 
+    private var baiduHasRealtimeItems: Bool {
+        settingsStore.draftSettings.watchlist.contains { $0.enabled && $0.baiduStreamSubscription != nil }
+    }
+
+    private var baiduStatusLabel: AnyView {
+        if baiduHasRealtimeItems {
+            return AnyView(DataSourceStateLabel(source: .baiduGlobalIndex))
+        }
+
+        return AnyView(DataSourceStateBadge(
+            title: NSLocalizedString("HTTP polling", comment: ""),
+            tint: Color.accentColor
+        ))
+    }
+
     var body: some View {
         ControlCenterScrollPane {
             VStack(spacing: 16) {
@@ -37,12 +52,9 @@ struct DataSourcesPane: View {
                     endpointPanel(
                         title: NSLocalizedString("FinScope", comment: ""),
                         subtitle: NSLocalizedString("Global index polling endpoint", comment: ""),
-                        statusLabel: AnyView(DataSourceStateBadge(
-                            title: NSLocalizedString("HTTP polling", comment: ""),
-                            tint: Color.accentColor
-                        )),
+                        statusLabel: baiduStatusLabel,
                         configuration: settingsStore.draftBinding(for: \.baiduConfig),
-                        showsWebSocket: false
+                        showsWebSocket: true
                     )
 
                     endpointPanel(
@@ -94,6 +106,8 @@ struct DataSourcesPane: View {
         showsWebSocket: Bool
     ) -> some View {
         GroupBox {
+            Toggle(NSLocalizedString("Use Proxy", comment: ""), isOn: endpointBoolBinding(configuration, \.useProxy))
+
             endpointField(
                 title: NSLocalizedString("Primary URL", comment: ""),
                 placeholder: "https://",
@@ -163,6 +177,16 @@ struct DataSourcesPane: View {
         _ configuration: Binding<EndpointConfiguration>,
         _ keyPath: WritableKeyPath<EndpointConfiguration, Double>
     ) -> Binding<Double> {
+        Binding(
+            get: { configuration.wrappedValue[keyPath: keyPath] },
+            set: { configuration.wrappedValue[keyPath: keyPath] = $0 }
+        )
+    }
+
+    private func endpointBoolBinding(
+        _ configuration: Binding<EndpointConfiguration>,
+        _ keyPath: WritableKeyPath<EndpointConfiguration, Bool>
+    ) -> Binding<Bool> {
         Binding(
             get: { configuration.wrappedValue[keyPath: keyPath] },
             set: { configuration.wrappedValue[keyPath: keyPath] = $0 }

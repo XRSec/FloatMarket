@@ -56,8 +56,6 @@ struct GeneralSettingsView: View {
             }
 
             GroupBox {
-                Toggle(NSLocalizedString("Enable Proxy", comment: ""), isOn: settingsStore.draftBinding(for: \.proxyEnabled))
-
                 HStack(alignment: .top, spacing: 12) {
                     Picker(NSLocalizedString("Proxy Type", comment: ""), selection: settingsStore.draftBinding(for: \.proxyType)) {
                         ForEach(ProxyType.allCases) { type in
