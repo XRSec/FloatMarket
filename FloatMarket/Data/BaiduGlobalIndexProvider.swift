@@ -17,61 +17,7 @@
 
 import Foundation
 
-// 百度探测日志记录器（Actor 保证线程安全）
-private actor BaiduProbeFileLogger {
-    static let shared = BaiduProbeFileLogger()
-    static let fileURL: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base
-            .appendingPathComponent("FloatMarket", isDirectory: true)
-            .appendingPathComponent("baidu-index-probe.log")
-    }()
 
-    private var didWriteSessionHeader = false
-
-    func append(_ message: String) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        writeIfNeededSessionHeader(timestamp: timestamp)
-        writeLine("[\(timestamp)] \(message)")
-    }
-
-    private func writeIfNeededSessionHeader(timestamp: String) {
-        guard !didWriteSessionHeader else { return }
-        didWriteSessionHeader = true
-        writeLine("")
-        writeLine("===== FloatMarket Baidu Probe Session \(timestamp) =====")
-    }
-
-    private func writeLine(_ line: String) {
-        let url = Self.fileURL
-        let directoryURL = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
-        }
-
-        guard let data = (line + "\n").data(using: .utf8) else { return }
-        do {
-            let handle = try FileHandle(forWritingTo: url)
-            try handle.seekToEnd()
-            try handle.write(contentsOf: data)
-            try handle.close()
-        } catch {
-            try? data.write(to: url, options: [.atomic])
-        }
-    }
-}
-
-private enum BaiduProbeLog {
-    static var fileURL: URL { BaiduProbeFileLogger.fileURL }
-
-    static func record(_ message: String) {
-        Task {
-            await BaiduProbeFileLogger.shared.append(message)
-        }
-    }
-}
 
 // WebSocket 连接状态
 private enum BaiduWebSocketStatus: String {
@@ -237,7 +183,6 @@ extension MarketDataClient {
         existingSnapshots: [UUID: QuoteSnapshot]
     ) async -> SourceFetchResult {
         guard !items.isEmpty else { return SourceFetchResult() }
-        BaiduProbeLog.record("HTTP candidate items: \(items.map { "\($0.symbol.uppercased())[\($0.displayName)]" }.joined(separator: ", "))")
 
         // 过滤出需要刷新的项目
         // 1. 如果没有快照，总是刷新
@@ -256,7 +201,6 @@ extension MarketDataClient {
         }
 
         guard !refreshableItems.isEmpty else {
-            BaiduProbeLog.record("HTTP skipped: all items are outside trading hours and have snapshots")
             return SourceFetchResult()
         }
 
@@ -291,8 +235,6 @@ extension MarketDataClient {
         if area == .foreign {
             return await fetchBaiduForeign(items: items, config: config, settings: settings)
         }
-
-        BaiduProbeLog.record("HTTP request area=\(area.rawValue) symbols=\(items.map { $0.symbol.uppercased() }.joined(separator: ","))")
 
         // 请求百度股市通 API
         let attempt = await request(
@@ -345,14 +287,8 @@ extension MarketDataClient {
                     LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), area.title, $0.displayName, $0.symbol))
                 })
                 
-                // 记录探测日志
-                BaiduProbeLog.record("HTTP response area=\(area.rawValue) matched=\(snapshots.map { "\($0.item.symbol.uppercased())@\($0.priceText)" }.joined(separator: ", "))")
-                if !missing.isEmpty {
-                    BaiduProbeLog.record("HTTP response area=\(area.rawValue) missing=\(missing.map { $0.symbol.uppercased() }.joined(separator: ","))")
-                }
                 return SourceFetchResult(snapshots: snapshots, logs: logs)
             } catch {
-                BaiduProbeLog.record("HTTP decode failed area=\(area.rawValue) error=\(error.localizedDescription)")
                 return SourceFetchResult(
                     logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), area.title, error.localizedDescription))]
                 )
@@ -366,7 +302,6 @@ extension MarketDataClient {
         config: EndpointConfiguration,
         settings: AppSettings
     ) async -> SourceFetchResult {
-        BaiduProbeLog.record("HTTP request area=foreign symbols=\(items.map { $0.symbol.uppercased() }.joined(separator: ","))")
         
         // 外汇市场使用 /api/getbanner 接口
         let attempt = await request(
@@ -415,14 +350,8 @@ extension MarketDataClient {
                     LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), $0.displayName, $0.symbol))
                 })
                 
-                // 记录探测日志
-                BaiduProbeLog.record("HTTP response area=foreign matched=\(snapshots.map { "\($0.item.symbol.uppercased())@\($0.priceText)" }.joined(separator: ", "))")
-                if !missing.isEmpty {
-                    BaiduProbeLog.record("HTTP response area=foreign missing=\(missing.map { $0.symbol.uppercased() }.joined(separator: ","))")
-                }
                 return SourceFetchResult(snapshots: snapshots, logs: logs)
             } catch {
-                BaiduProbeLog.record("HTTP decode failed area=foreign error=\(error.localizedDescription)")
                 return SourceFetchResult(
                     logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), error.localizedDescription))]
                 )
@@ -477,12 +406,10 @@ extension MarketStreamController {
     ) async {
         let urls = config.candidateWebSocketURLs
         await stateHandler(.baiduGlobalIndex, .connecting)
-        BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.connecting.rawValue)")
         
         // 检查是否配置了 WebSocket URL
         guard !urls.isEmpty else {
             await stateHandler(.baiduGlobalIndex, .disconnected)
-            BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.disabled.rawValue)")
             await snapshotHandler([], [LogEntry(level: .error, message: NSLocalizedString("Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP.", comment: ""))])
             return
         }
@@ -494,17 +421,14 @@ extension MarketStreamController {
         for item in items {
             // 检查是否支持 WebSocket 订阅
             guard let subscription = item.baiduStreamSubscription else {
-                BaiduProbeLog.record("WSS skipped symbol=\(item.symbol.uppercased()) name=\(item.displayName) reason=unsupported_by_subscribeJudge_market quickLink=\(item.resolvedQuickLinkURL ?? "-")")
                 continue
             }
             // 检查当前是否在交易时段
             guard item.baiduShouldUseStreamNow else {
-                BaiduProbeLog.record("WSS skipped symbol=\(item.symbol.uppercased()) name=\(item.displayName) reason=not_trading_now market=\(subscription.market)")
                 continue
             }
             subscriptionByKey[subscription.key] = subscription
             itemMap[subscription.key, default: []].append(item)
-            BaiduProbeLog.record("WSS candidate symbol=\(subscription.code) market=\(subscription.market) financeType=\(subscription.financeType)")
         }
 
         let subscriptions = subscriptionByKey
@@ -535,7 +459,6 @@ extension MarketStreamController {
             } catch {
                 if Task.isCancelled { break }
                 await stateHandler(.baiduGlobalIndex, .disconnected)
-                BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.disconnect.rawValue) msgStatus=\(BaiduWebSocketMessageStatus.error.rawValue) error=\(error.localizedDescription)")
                 await snapshotHandler([], [LogEntry(level: .error, message: NetworkLogFormatter.webSocketDisconnectedMessage(sourceName: NSLocalizedString("Baidu Gushitong", comment: ""), error: error))])
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
@@ -543,7 +466,6 @@ extension MarketStreamController {
 
         if !Task.isCancelled {
             await stateHandler(.baiduGlobalIndex, .disconnected)
-            BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.disconnect.rawValue)")
         }
     }
 
@@ -563,9 +485,7 @@ extension MarketStreamController {
         }
 
         await stateHandler(.baiduGlobalIndex, .connecting)
-        BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.connecting.rawValue)")
         await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Connecting To Baidu Gushitong WebSocket: %@", comment: ""), urlString))])
-        BaiduProbeLog.record("WSS connect url=\(urlString) subscriptions=\(subscriptions.map { "\($0.code):\($0.market)" }.joined(separator: ","))")
 
         let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
         let task = session.webSocketTask(with: url)
@@ -579,7 +499,6 @@ extension MarketStreamController {
             "product": BaiduWebSocketProduct.snapshot.rawValue,
             "items": subscriptions.map(\.payload)
         ]
-        BaiduProbeLog.record("WSS send subscribe payload=\(String(data: (try? JSONSerialization.data(withJSONObject: subscribePayload, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}")")
         try await task.send(.string(try jsonString(subscribePayload)))
 
         // 启动心跳任务，每 6 秒发送一次 ping
@@ -591,7 +510,6 @@ extension MarketStreamController {
                     "source": "pc-web"
                 ]
                 try? await task.send(.string(try jsonString(pingPayload)))
-                BaiduProbeLog.record("WSS send ping")
             }
         }
         defer {
@@ -610,13 +528,11 @@ extension MarketStreamController {
 
             // 处理重连请求（resultCode = 70010001）
             if let resultCode = payload["resultCode"] as? String, resultCode == "70010001" {
-                BaiduProbeLog.record("WSS msgStatus=\(BaiduWebSocketMessageStatus.reconnect.rawValue) resultCode=70010001 resubscribe")
                 try await task.send(.string(try jsonString(subscribePayload)))
                 continue
             }
 
             if let resultCodeNumber = payload["resultCode"] as? NSNumber, resultCodeNumber.intValue == 70010001 {
-                BaiduProbeLog.record("WSS msgStatus=\(BaiduWebSocketMessageStatus.reconnect.rawValue) resultCode=70010001 resubscribe")
                 try await task.send(.string(try jsonString(subscribePayload)))
                 continue
             }
@@ -624,7 +540,6 @@ extension MarketStreamController {
             // 处理心跳消息
             if let data = payload["data"] as? String {
                 if data == "ping" || data == "pong" {
-                    BaiduProbeLog.record("WSS recv heartbeat=\(data)")
                     continue
                 }
             }
@@ -633,7 +548,6 @@ extension MarketStreamController {
             guard let resultCode = payload["resultCode"] else { continue }
             let resultCodeText = String(describing: resultCode)
             if resultCodeText != "0" {
-                BaiduProbeLog.record("WSS recv nonzero resultCode=\(resultCodeText) payload=\(text)")
                 continue
             }
 
@@ -642,14 +556,12 @@ extension MarketStreamController {
                   let code = (data["code"] as? String)?.uppercased(),
                   let market = (data["market"] as? String)?.lowercased()
             else {
-                BaiduProbeLog.record("WSS recv resultCode=0 but no quote payload raw=\(text)")
                 continue
             }
 
             let financeType = ((data["financeType"] as? String) ?? (data["type"] as? String) ?? "index").lowercased()
             let key = BaiduStreamSubscription.key(code: code, market: market, financeType: financeType)
             guard let watchItems = itemMap[key] else {
-                BaiduProbeLog.record("WSS recv quote for unsubscribed key=\(key) raw=\(text)")
                 continue
             }
 
@@ -657,18 +569,11 @@ extension MarketStreamController {
             let snapshots = watchItems.compactMap { item in
                 makeBaiduStreamSnapshot(data: data, item: item, baseURL: url.host ?? urlString)
             }
-            let update = data["update"] as? [String: Any]
-            let tradeStatus = (update?["tradeStatus"] as? String) ?? "-"
-            let priceText = snapshots.first.map(\.priceText) ?? "--"
-            // 检查交易状态是否符合 WebSocket 推送条件
-            let scriptEligible = BaiduTradeStatus.wsEligibleCases.contains(tradeStatus)
-            BaiduProbeLog.record("WSS msgStatus=\(BaiduWebSocketMessageStatus.msg.rawValue) recv quote symbol=\(code) market=\(market) tradeStatus=\(tradeStatus) scriptEligible=\(scriptEligible) price=\(priceText) matchedItems=\(watchItems.count)")
 
             // 首次收到数据时标记为已连接
             if !acknowledged {
                 acknowledged = true
                 await stateHandler(.baiduGlobalIndex, .connected)
-                BaiduProbeLog.record("WSS state=\(BaiduWebSocketStatus.connected.rawValue) msgStatus=\(BaiduWebSocketMessageStatus.connected.rawValue)")
                 await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong WebSocket Subscribed %d Symbols.", comment: ""), subscriptions.count))])
             }
 
