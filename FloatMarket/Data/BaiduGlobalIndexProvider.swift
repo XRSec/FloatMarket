@@ -1,18 +1,18 @@
 /*
  * BaiduGlobalIndexProvider.swift
- * 百度股市通全球指数数据提供者
+ * 百度股市通全球指数数据提供者（自选 API 版本）
  *
  * 功能说明：
- * 1. HTTP 轮询：通过 REST API 获取全球指数行情数据
- * 2. WebSocket 实时流：订阅实时行情推送（仅在交易时段）
- * 3. 交易时间判断：根据市场时区和交易时段智能控制数据获取
- * 4. 调试日志：记录详细的请求和响应信息到本地文件
+ * 1. 自选列表同步：通过 gethomeinfo 获取用户的自选项目列表
+ * 2. HTTP 轮询：通过 gettrenddata 获取自选项目的行情数据
+ * 3. WebSocket 实时流：订阅实时行情推送（仅在交易时段）
+ * 4. 交易时间判断：根据市场时区和交易时段智能控制数据获取
  *
- * 支持的市场：
- * - 美洲市场（美股指数）
- * - 亚洲市场（港股、A股、日韩指数）
- * - 欧非市场（欧洲指数）
- * - 外汇市场（货币对）
+ * 重要变更（相比 area 分组方案）：
+ * - 不再按地区（america/asia/euro_africa）分组
+ * - 使用百度自选 API 获取项目列表
+ * - 需要用户提供 BDUSS cookie 认证
+ * - 支持市场：us（美股）、hk（港股）、ab（A股）等
  */
 
 import Foundation
@@ -188,8 +188,9 @@ extension MarketDataClient {
         return headers
     }
 
-    // 获取百度股市通数据（HTTP 方式）
-    // 根据交易时间智能判断是否需要刷新，避免收盘后不必要的轮询
+    // 获取百度股市通数据（HTTP 方式 - 自选 API）
+    // 使用 gettrenddata 接口获取自选项目的行情数据
+    // 不再按 area 分组，直接使用项目列表
     func fetchBaidu(
         items: [WatchItem],
         config: EndpointConfiguration,
@@ -197,6 +198,13 @@ extension MarketDataClient {
         existingSnapshots: [UUID: QuoteSnapshot]
     ) async -> SourceFetchResult {
         guard !items.isEmpty else { return SourceFetchResult() }
+        
+        // 检查 BDUSS 是否配置
+        guard config.hasBDUSS else {
+            return SourceFetchResult(
+                logs: [LogEntry(level: .error, message: NSLocalizedString("Baidu Gushitong: BDUSS Not Configured. Please set BDUSS in settings.", comment: ""))]
+            )
+        }
 
         // 过滤出需要刷新的项目
         // 1. 如果没有快照，总是刷新
@@ -218,47 +226,40 @@ extension MarketDataClient {
             return SourceFetchResult()
         }
 
-        let grouped = Dictionary(grouping: refreshableItems) { $0.area ?? .all }
-        var combined = SourceFetchResult()
-
-        await withTaskGroup(of: SourceFetchResult.self) { group in
-            for (area, areaItems) in grouped {
-                group.addTask {
-                    await fetchBaiduArea(area: area, items: areaItems, config: config, settings: settings)
-                }
-            }
-
-            for await result in group {
-                combined.snapshots.append(contentsOf: result.snapshots)
-                combined.logs.append(contentsOf: result.logs)
-            }
-        }
-
-        return combined
+        // 使用 gettrenddata 获取自选项目行情
+        // 不再按 area 分组
+        return await fetchBaiduTrendData(items: refreshableItems, config: config, settings: settings)
     }
 
-    // 按区域获取百度股市通数据
-    // area: 市场区域（美洲、亚洲、欧非、外汇等）
-    private func fetchBaiduArea(
-        area: BaiduArea,
+    // 获取百度股市通趋势数据（自选 API）
+    // gettrenddata 是获取自选项目行情的统一接口
+    private func fetchBaiduTrendData(
         items: [WatchItem],
         config: EndpointConfiguration,
         settings: AppSettings
     ) async -> SourceFetchResult {
-        // 外汇市场使用不同的 API
-        if area == .foreign {
-            return await fetchBaiduForeign(items: items, config: config, settings: settings)
+        // 构建请求体：包含所有项目的代码和市场信息
+        var requestItems: [[String: String]] = []
+        for item in items {
+            guard let market = item.baiduResolvedMarket else { continue }
+            requestItems.append([
+                "code": item.symbol.uppercased(),
+                "market": market
+            ])
         }
 
-        // 请求百度股市通 API
+        guard !requestItems.isEmpty else {
+            return SourceFetchResult(
+                logs: [LogEntry(level: .warning, message: NSLocalizedString("Baidu Gushitong: No valid items to fetch.", comment: ""))]
+            )
+        }
+
+        // 发送 POST 请求到 gettrenddata
         let attempt = await request(
             sourceName: NSLocalizedString("Baidu Gushitong", comment: ""),
-            path: "/vapi/v1/globalindexrank",
-            queryItems: [
-                URLQueryItem(name: "pn", value: "0"),
-                URLQueryItem(name: "rn", value: "120"),
-                URLQueryItem(name: "area", value: area.rawValue)
-            ],
+            path: "/selfselect/gettrenddata",
+            method: "POST",
+            body: requestItems,
             config: config,
             settings: settings,
             headers: Self.baiduHTTPHeaders(config: config)
@@ -270,116 +271,55 @@ extension MarketDataClient {
 
         case let .success(data, baseURL):
             do {
-                if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
+                // 解析响应数据
+                let response = try JSONDecoder().decode(BaiduTrendDataResponse.self, from: data)
+                
+                // 检查返回码
+                guard response.errno == 0 else {
                     return SourceFetchResult(
-                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), area.title, resultCode))]
+                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong Request Failed With Error Code %d.", comment: ""), response.errno))]
                     )
                 }
-                // 解析 JSON 响应
-                let response = try JSONDecoder().decode(BaiduGlobalIndexResponse.self, from: data)
-                let quotes = response.Result.body
-                
-                // 构建 symbol -> quote 的映射表（不区分大小写）
-                let mapped = Dictionary(uniqueKeysWithValues: quotes.map { ($0.code.uppercased(), $0) })
-                
+
+                // 构建 code+market -> quote 的映射表
+                var mapped: [String: BaiduTrendDataQuote] = [:]
+                for quote in response.data {
+                    let key = "\(quote.code.uppercased())_\(quote.market.lowercased())"
+                    mapped[key] = quote
+                }
+
                 // 为每个监控项生成快照
                 let snapshots = items.compactMap { item -> QuoteSnapshot? in
-                    guard let quote = mapped[item.symbol.uppercased()] else { return nil }
+                    guard let market = item.baiduResolvedMarket else { return nil }
+                    let key = "\(item.symbol.uppercased())_\(market.lowercased())"
+                    guard let quote = mapped[key] else { return nil }
+                    
                     return QuoteSnapshot(
                         id: item.id,
                         item: item,
-                        price: Double(quote.last_px),
-                        change: Double(quote.px_change),
-                        changePercent: Self.cleanPercent(quote.px_change_rate),
+                        price: Double(quote.cur_price) ?? Double(quote.last_price),
+                        change: Double(quote.cur_increase) ?? Double(quote.increase),
+                        changePercent: Self.cleanPercent(quote.cur_ratio ?? quote.ratio),
                         sourceLabel: item.sourceKind.title,
-                        marketStatus: area.title,
+                        marketStatus: quote.update_status_cn ?? quote.update_status,
                         fetchedAt: Date(),
                         usedBaseURL: baseURL
                     )
                 }
 
                 // 生成日志：成功和缺失的项目
-                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.", comment: ""), area.title, snapshots.count))]
+                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong Refresh Succeeded, Matched %d Items.", comment: ""), snapshots.count))]
                 let missing = items.filter { item in
                     !snapshots.contains(where: { $0.item.id == item.id })
                 }
                 logs.append(contentsOf: missing.map {
-                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), area.title, $0.displayName, $0.symbol))
+                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong Did Not Return %@ (%@).", comment: ""), $0.displayName, $0.symbol))
                 })
-                
+
                 return SourceFetchResult(snapshots: snapshots, logs: logs)
             } catch {
                 return SourceFetchResult(
-                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), area.title, error.localizedDescription))]
-                )
-            }
-        }
-    }
-
-    // 获取外汇市场数据（使用不同的 API 端点）
-    private func fetchBaiduForeign(
-        items: [WatchItem],
-        config: EndpointConfiguration,
-        settings: AppSettings
-    ) async -> SourceFetchResult {
-        
-        // 外汇市场使用 /api/getbanner 接口
-        let attempt = await request(
-            sourceName: NSLocalizedString("Baidu Gushitong", comment: ""),
-            path: "/api/getbanner",
-            queryItems: [
-                URLQueryItem(name: "market", value: "foreign"),
-                URLQueryItem(name: "finClientType", value: "pc")
-            ],
-            config: config,
-            settings: settings,
-            headers: Self.baiduHTTPHeaders(config: config)
-        )
-
-        switch attempt {
-        case let .failure(logs):
-            return SourceFetchResult(logs: logs)
-
-        case let .success(data, baseURL):
-            do {
-                if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
-                    return SourceFetchResult(
-                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), resultCode))]
-                    )
-                }
-                // 解析外汇市场的 JSON 响应（结构与指数不同）
-                let response = try JSONDecoder().decode(BaiduBannerResponse.self, from: data)
-                let mapped = Dictionary(uniqueKeysWithValues: response.Result.list.map { ($0.code.uppercased(), $0) })
-                
-                // 为每个监控项生成快照
-                let snapshots = items.compactMap { item -> QuoteSnapshot? in
-                    guard let quote = mapped[item.symbol.uppercased()] else { return nil }
-                    return QuoteSnapshot(
-                        id: item.id,
-                        item: item,
-                        price: Double(quote.lastPrice),
-                        change: Double(quote.increase),
-                        changePercent: Self.cleanPercent(quote.ratio),
-                        sourceLabel: item.sourceKind.title,
-                        marketStatus: NSLocalizedString("Foreign Exchange", comment: ""),
-                        fetchedAt: Date(),
-                        usedBaseURL: baseURL
-                    )
-                }
-
-                // 生成日志
-                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), snapshots.count))]
-                let missing = items.filter { item in
-                    !snapshots.contains(where: { $0.item.id == item.id })
-                }
-                logs.append(contentsOf: missing.map {
-                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), $0.displayName, $0.symbol))
-                })
-                
-                return SourceFetchResult(snapshots: snapshots, logs: logs)
-            } catch {
-                return SourceFetchResult(
-                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), error.localizedDescription))]
+                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong Decode Failed: %@", comment: ""), error.localizedDescription))]
                 )
             }
         }
@@ -394,38 +334,32 @@ extension MarketDataClient {
     }
 }
 
-// 百度全球指数 API 响应结构
-private struct BaiduGlobalIndexResponse: Decodable {
-    struct ResultBody: Decodable {
-        let body: [BaiduQuote]
-    }
-
-    struct BaiduQuote: Decodable {
-        let name: String           // 指数名称
-        let code: String           // 指数代码
-        let last_px: String        // 最新价格
-        let px_change: String      // 涨跌额
-        let px_change_rate: String // 涨跌幅
-    }
-
-    let Result: ResultBody
+// 百度趋势数据 API 响应结构（gettrenddata）
+private struct BaiduTrendDataResponse: Decodable {
+    let errno: Int           // 错误码（0 表示成功）
+    let errmsg: String       // 错误信息
+    let data: [BaiduTrendDataQuote]  // 行情数据列表
 }
 
-// 百度外汇市场 API 响应结构
-private struct BaiduBannerResponse: Decodable {
-    struct ResultBody: Decodable {
-        let list: [BannerItem]
-    }
-
-    struct BannerItem: Decodable {
-        let code: String      // 货币对代码
-        let name: String      // 货币对名称
-        let lastPrice: String // 最新价格
-        let increase: String  // 涨跌额
-        let ratio: String     // 涨跌幅
-    }
-
-    let Result: ResultBody
+// 百度趋势数据中的单个行情项
+private struct BaiduTrendDataQuote: Decodable {
+    let code: String         // 代码
+    let market: String       // 市场
+    let name: String         // 名称
+    
+    // 当前价格相关
+    let cur_price: String?   // 当前价格
+    let last_price: String   // 最后价格（备用）
+    
+    // 涨跌相关
+    let cur_increase: String?     // 当前涨跌额
+    let increase: String          // 涨跌额（备用）
+    let cur_ratio: String?        // 当前涨跌幅
+    let ratio: String             // 涨跌幅（备用）
+    
+    // 状态相关
+    let update_status_cn: String?  // 中文状态描述
+    let update_status: String      // 状态（备用）
 }
 
 extension MarketStreamController {
