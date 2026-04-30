@@ -156,7 +156,7 @@ final class MarketStore: ObservableObject {
     // MARK: - Status
 
     private var streamHealth: (activeKinds: [DataSourceKind], disconnectedCount: Int) {
-        let active = activeStreamingKinds
+        let active = activeStreamingKinds.filter { streamStates[$0] != .standby }
         let disconnected = active.filter { streamStates[$0] != .connected }.count
         return (active, disconnected)
     }
@@ -506,7 +506,7 @@ final class MarketStore: ObservableObject {
             Set(
                 settings.watchlist
                     .filter { $0.enabled && Self.isStreamingWatchItem($0) }
-                    .map(\.sourceKind)
+                    .map { Self.streamStateKind(for: $0.sourceKind) }
             )
         ).sorted { $0.rawValue < $1.rawValue }
     }
@@ -568,6 +568,9 @@ final class MarketStore: ObservableObject {
                 await enqueueRefresh(.streamFallback(kind: kind, trigger: .disconnected))
             }
 
+        case .standby:
+            break
+
         case .connecting:
             break
         }
@@ -606,7 +609,10 @@ final class MarketStore: ObservableObject {
             shouldLogLifecycle = false
 
         case let .streamFallback(kind, trigger):
-            items = settings.watchlist.filter { $0.enabled && $0.sourceKind == kind }
+            items = settings.watchlist.filter { item in
+                guard item.enabled else { return false }
+                return Self.streamStateKind(for: item.sourceKind) == kind
+            }
             label = streamRefreshLabel(for: kind, trigger: trigger)
             shouldLogSkip = false
             shouldLogLifecycle = true
@@ -687,11 +693,20 @@ final class MarketStore: ObservableObject {
     private static func isStreamingWatchItem(_ item: WatchItem) -> Bool {
         switch item.sourceKind {
         case .baiduGlobalIndex:
+            return item.baiduStreamSubscription != nil
+        case .okxSpot, .gateSpot, .gateSpotMarket, .binancePerp:
             return true
-        case .okxSpot, .gateSpot, .binancePerp:
-            return true
-        case .sinaGlobalIndex, .okxSpotMarket, .gateSpotMarket, .binanceSpot:
+        case .sinaGlobalIndex, .okxSpotMarket, .binanceSpot:
             return false
+        }
+    }
+
+    private static func streamStateKind(for kind: DataSourceKind) -> DataSourceKind {
+        switch kind {
+        case .gateSpotMarket:
+            return .gateSpot
+        default:
+            return kind
         }
     }
 

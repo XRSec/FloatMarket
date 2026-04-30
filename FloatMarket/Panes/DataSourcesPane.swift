@@ -11,6 +11,7 @@ private struct DataSourceStateLabel: View {
 
     private var statusText: String {
         switch store.streamStates[source] ?? .disconnected {
+        case .standby:      return NSLocalizedString("Standby", comment: "")
         case .connected:    return NSLocalizedString("Connected", comment: "")
         case .connecting:   return NSLocalizedString("Connecting", comment: "")
         case .disconnected: return NSLocalizedString("Disconnected", comment: "")
@@ -19,6 +20,7 @@ private struct DataSourceStateLabel: View {
 
     private var statusColor: Color {
         switch store.streamStates[source] ?? .disconnected {
+        case .standby:      return Color(nsColor: .secondaryLabelColor)
         case .connected:    return Color(red: 0.27, green: 0.83, blue: 0.54)
         case .connecting:   return Color(red: 0.34, green: 0.73, blue: 0.98)
         case .disconnected: return Color(red: 0.96, green: 0.37, blue: 0.35)
@@ -30,12 +32,14 @@ private struct DataSourceStateLabel: View {
 struct DataSourcesPane: View {
     @EnvironmentObject private var settingsStore: SettingsStore
 
-    private var baiduHasRealtimeItems: Bool {
-        settingsStore.draftSettings.watchlist.contains { $0.enabled && $0.baiduStreamSubscription != nil }
+    private var baiduHasActiveRealtimeItems: Bool {
+        settingsStore.draftSettings.watchlist.contains { item in
+            item.enabled && item.baiduShouldUseStreamNow
+        }
     }
 
     private var baiduStatusLabel: AnyView {
-        if baiduHasRealtimeItems {
+        if baiduHasActiveRealtimeItems {
             return AnyView(DataSourceStateLabel(source: .baiduGlobalIndex))
         }
 
@@ -43,6 +47,13 @@ struct DataSourcesPane: View {
             title: NSLocalizedString("HTTP polling", comment: ""),
             tint: Color.accentColor
         ))
+    }
+
+    private var baiduBDUSSBinding: Binding<String> {
+        Binding(
+            get: { settingsStore.draftSettings.baiduConfig.bduss },
+            set: { settingsStore.draftSettings.baiduConfig.bduss = $0 }
+        )
     }
 
     var body: some View {
@@ -54,7 +65,27 @@ struct DataSourcesPane: View {
                         subtitle: NSLocalizedString("Global index polling endpoint", comment: ""),
                         statusLabel: baiduStatusLabel,
                         configuration: settingsStore.draftBinding(for: \.baiduConfig),
-                        showsWebSocket: true
+                        showsWebSocket: true,
+                        extraContent: AnyView(
+                            VStack(alignment: .leading, spacing: 10) {
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(NSLocalizedString("BDUSS", comment: ""))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+
+                                    SecureField("BDUSS=", text: baiduBDUSSBinding)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+
+                                    Text(NSLocalizedString("Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane.", comment: ""))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        )
                     )
 
                     endpointPanel(
@@ -103,7 +134,8 @@ struct DataSourcesPane: View {
         subtitle: String,
         statusLabel: AnyView,
         configuration: Binding<EndpointConfiguration>,
-        showsWebSocket: Bool
+        showsWebSocket: Bool,
+        extraContent: AnyView? = nil
     ) -> some View {
         GroupBox {
             Toggle(NSLocalizedString("Use Proxy", comment: ""), isOn: endpointBoolBinding(configuration, \.useProxy))
@@ -142,6 +174,10 @@ struct DataSourcesPane: View {
                 range: 3...20,
                 step: 1
             )
+
+            if let extraContent {
+                extraContent
+            }
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 ControlCenterSectionLabel(title: title, subtitle: subtitle)

@@ -122,7 +122,7 @@ struct MarketDataClient {
             settings: settings
         )
         async let gate = fetchGate(
-            items: activeItems.filter { $0.sourceKind == .gateSpotMarket || $0.sourceKind == .gateSpot },
+            items: gateHTTPRefreshItems(from: activeItems),
             config: settings.gateConfig,
             settings: settings
         )
@@ -142,6 +142,21 @@ struct MarketDataClient {
             snapshots: baiduResult.snapshots + sinaResult.snapshots + okxResult.snapshots + gateResult.snapshots + binanceResult.snapshots,
             logs: baiduResult.logs + sinaResult.logs + okxResult.logs + gateResult.logs + binanceResult.logs
         )
+    }
+
+    private func gateHTTPRefreshItems(from items: [WatchItem]) -> [WatchItem] {
+        guard items.allSatisfy({ $0.sourceKind == .gateSpot || $0.sourceKind == .gateSpotMarket }) else {
+            return []
+        }
+
+        return items.filter {
+            switch $0.sourceKind {
+            case .gateSpot, .gateSpotMarket:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     func request(
@@ -260,7 +275,9 @@ final class MarketStreamController {
 
         let baiduItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .baiduGlobalIndex }
         let okxItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .okxSpot }
-        let gateItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .gateSpot }
+        let gateItems = settings.watchlist.filter {
+            $0.enabled && ($0.sourceKind == .gateSpot || $0.sourceKind == .gateSpotMarket)
+        }
         let binanceItems = settings.watchlist.filter { $0.enabled && $0.sourceKind == .binancePerp }
 
         if !baiduItems.isEmpty {

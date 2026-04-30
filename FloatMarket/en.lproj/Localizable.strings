@@ -171,6 +171,7 @@
 "Aurora" = "Aurora";
 "Baidu Gushitong [%@] Decode Failed: %@" = "Baidu Gushitong [%@] Decode Failed: %@";
 "Baidu Gushitong [%@] Did Not Return %@ (%@)." = "Baidu Gushitong [%@] Did Not Return %@ (%@).";
+"Baidu Gushitong [%@] Request Rejected With ResultCode %@." = "Baidu Gushitong [%@] Request Rejected With ResultCode %@.";
 "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items." = "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.";
 "Baidu Gushitong WebSocket Subscribed %d Symbols." = "Baidu Gushitong WebSocket Subscribed %d Symbols.";
 "Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP." = "Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP.";
@@ -194,6 +195,7 @@
 "Gate Returned Empty Data: %@." = "Gate Returned Empty Data: %@.";
 "Gate WebSocket Subscribed %d Symbols." = "Gate WebSocket Subscribed %d Symbols.";
 "Gate WebSocket URL Is Missing. Falling Back To HTTP." = "Gate WebSocket URL Is Missing. Falling Back To HTTP.";
+"Gate futures WebSocket URL is missing, spot stream will continue without perpetual coverage." = "Gate futures WebSocket URL is missing, spot stream will continue without perpetual coverage.";
 "German DAX" = "German DAX";
 "Graphite" = "Graphite";
 "Invalid Test URL" = "Invalid Test URL";
@@ -267,6 +269,7 @@
 "TOPIX" = "TOPIX";
 "FTSE China A50" = "FTSE China A50";
 "Foreign Exchange" = "Foreign Exchange";
+"BDUSS" = "BDUSS";
 "US Dollar Index" = "US Dollar Index";
 "USD/CNY" = "USD/CNY";
 "USD/CNH" = "USD/CNH";
@@ -288,12 +291,14 @@
 "Binance Perpetual" = "Binance Perpetual";
 "Spot" = "Spot";
 "Spot and perpetual market data lane" = "Spot and perpetual market data lane";
+"Standby" = "Standby";
 "SOL Perpetual" = "SOL Perpetual";
 "XRP Perpetual" = "XRP Perpetual";
 "DOGE Perpetual" = "DOGE Perpetual";
 "Auto refresh only polls indices and HTTP snapshot feeds. WebSocket feeds only resync after disconnects or reconnects." = "Auto refresh only polls indices and HTTP snapshot feeds. WebSocket feeds only resync after disconnects or reconnects.";
 "Choose how often polled sources are checked. This does not force timer-based refreshes on WebSocket feeds." = "Choose how often polled sources are checked. This does not force timer-based refreshes on WebSocket feeds.";
 "Polling controls live here. WebSocket feeds recover with snapshot syncs after disconnects and reconnects." = "Polling controls live here. WebSocket feeds recover with snapshot syncs after disconnects and reconnects.";
+"Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane." = "Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane.";
 "Refresh Now only polls indices and HTTP snapshot feeds." = "Refresh Now only polls indices and HTTP snapshot feeds.";
 "WebSocket recovery syncs, request failures, proxy test results, and decoding issues will appear here." = "WebSocket recovery syncs, request failures, proxy test results, and decoding issues will appear here.";
 "Events are shown newest first so stream recovery and recent failures stay easy to trace." = "Events are shown newest first so stream recovery and recent failures stay easy to trace.";

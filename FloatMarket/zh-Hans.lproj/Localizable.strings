@@ -171,6 +171,7 @@
 "Aurora" = "极光";
 "Baidu Gushitong [%@] Decode Failed: %@" = "百度股市通[%@] 解码失败: %@";
 "Baidu Gushitong [%@] Did Not Return %@ (%@)." = "百度股市通[%@] 未返回 %@ (%@)。";
+"Baidu Gushitong [%@] Request Rejected With ResultCode %@." = "百度股市通[%@] 请求被拒绝，ResultCode=%@。";
 "Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items." = "百度股市通[%@] 刷新成功，命中 %d 条。";
 "Baidu Gushitong WebSocket Subscribed %d Symbols." = "百度股市通 WebSocket 已订阅 %d 个指数。";
 "Baidu Gushitong WebSocket URL Is Missing. Falling Back To HTTP." = "百度股市通 WebSocket URL 未配置，已回退到 HTTP。";
@@ -194,6 +195,7 @@
 "Gate Returned Empty Data: %@." = "Gate 返回空数据: %@。";
 "Gate WebSocket Subscribed %d Symbols." = "Gate WebSocket 已订阅 %d 个币对。";
 "Gate WebSocket URL Is Missing. Falling Back To HTTP." = "Gate WebSocket URL 未配置，已回退到 HTTP。";
+"Gate futures WebSocket URL is missing, spot stream will continue without perpetual coverage." = "Gate 永续 WebSocket URL 未配置，现货流会继续运行，但不会覆盖永续。";
 "German DAX" = "德国DAX";
 "Graphite" = "曜石";
 "Invalid Test URL" = "测试地址无效";
@@ -288,6 +290,7 @@
 "Binance Perpetual" = "Binance 永续";
 "Spot" = "现货";
 "Spot and perpetual market data lane" = "现货与永续行情通道";
+"Standby" = "待机";
 "SOL Perpetual" = "SOL 永续";
 "XRP Perpetual" = "XRP 永续";
 "DOGE Perpetual" = "DOGE 永续";

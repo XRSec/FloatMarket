@@ -89,7 +89,19 @@ private struct GateSpotTicker: Decodable {
     let change_percentage: String
 }
 
+private actor GateStreamAcknowledgement {
+    private var didAcknowledge = false
+
+    func markConnected() -> Bool {
+        guard !didAcknowledge else { return false }
+        didAcknowledge = true
+        return true
+    }
+}
+
 extension MarketStreamController {
+    private static let gateSpotWebSocketURL = "wss://api.gateio.ws/ws/v4/"
+
     static func runGateStream(
         items: [WatchItem],
         config: EndpointConfiguration,
@@ -97,30 +109,61 @@ extension MarketStreamController {
         stateHandler: @escaping StateHandler,
         settings: AppSettings
     ) async {
-        let urls = config.candidateWebSocketURLs
+        let spotItems = items.filter { $0.sourceKind == .gateSpotMarket }
+        let futuresItems = items.filter { $0.sourceKind == .gateSpot }
+        let futureURLs = config.candidateWebSocketURLs
+        let hasSpotStream = !spotItems.isEmpty
+        let hasFuturesStream = !futuresItems.isEmpty && !futureURLs.isEmpty
+
         await stateHandler(.gateSpot, .connecting)
-        guard !urls.isEmpty else {
+        guard hasSpotStream || hasFuturesStream else {
             await stateHandler(.gateSpot, .disconnected)
             await snapshotHandler([], [LogEntry(level: .error, message: NSLocalizedString("Gate WebSocket URL Is Missing. Falling Back To HTTP.", comment: ""))])
             return
         }
-
-        let symbolMap = Dictionary(grouping: items) { $0.symbol.uppercased() }
-        var index = 0
+        if !futuresItems.isEmpty && futureURLs.isEmpty {
+            await snapshotHandler([], [LogEntry(level: .warning, message: NSLocalizedString("Gate futures WebSocket URL is missing, spot stream will continue without perpetual coverage.", comment: ""))])
+        }
 
         while !Task.isCancelled {
-            let currentURL = urls[index % urls.count]
-            index += 1
-
             do {
-                try await connectGate(
-                    urlString: currentURL,
-                    symbolMap: symbolMap,
-                    useProxy: config.useProxy,
-                    snapshotHandler: snapshotHandler,
-                    stateHandler: stateHandler,
-                    settings: settings
-                )
+                let acknowledgement = GateStreamAcknowledgement()
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    if hasSpotStream {
+                        let spotSymbolMap = Dictionary(grouping: spotItems) { $0.symbol.uppercased() }
+                        group.addTask {
+                            try await connectGateSpot(
+                                urlString: Self.gateSpotWebSocketURL,
+                                symbolMap: spotSymbolMap,
+                                acknowledgement: acknowledgement,
+                                useProxy: config.useProxy,
+                                snapshotHandler: snapshotHandler,
+                                stateHandler: stateHandler,
+                                settings: settings
+                            )
+                        }
+                    }
+
+                    if hasFuturesStream {
+                        let futuresSymbolMap = Dictionary(grouping: futuresItems) { $0.symbol.uppercased() }
+                        for url in futureURLs {
+                            group.addTask {
+                                try await connectGateFutures(
+                                    urlString: url,
+                                    symbolMap: futuresSymbolMap,
+                                    acknowledgement: acknowledgement,
+                                    useProxy: config.useProxy,
+                                    snapshotHandler: snapshotHandler,
+                                    stateHandler: stateHandler,
+                                    settings: settings
+                                )
+                            }
+                            break
+                        }
+                    }
+
+                    try await group.waitForAll()
+                }
             } catch {
                 if Task.isCancelled { break }
                 await stateHandler(.gateSpot, .disconnected)
@@ -134,9 +177,10 @@ extension MarketStreamController {
         }
     }
 
-    static func connectGate(
+    private static func connectGateFutures(
         urlString: String,
         symbolMap: [String: [WatchItem]],
+        acknowledgement: GateStreamAcknowledgement,
         useProxy: Bool,
         snapshotHandler: @escaping SnapshotHandler,
         stateHandler: @escaping StateHandler,
@@ -146,7 +190,6 @@ extension MarketStreamController {
             throw StreamError.invalidURL(urlString)
         }
 
-        await stateHandler(.gateSpot, .connecting)
         await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Connecting To Gate WebSocket: %@", comment: ""), urlString))])
 
         let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
@@ -206,7 +249,9 @@ extension MarketStreamController {
             if event == "subscribe" {
                 if !acknowledged {
                     acknowledged = true
-                    await stateHandler(.gateSpot, .connected)
+                    if await acknowledgement.markConnected() {
+                        await stateHandler(.gateSpot, .connected)
+                    }
                     await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Gate WebSocket Subscribed %d Symbols.", comment: ""), symbolMap.count))])
                 }
                 continue
@@ -220,7 +265,9 @@ extension MarketStreamController {
 
             if !acknowledged {
                 acknowledged = true
-                await stateHandler(.gateSpot, .connected)
+                if await acknowledgement.markConnected() {
+                    await stateHandler(.gateSpot, .connected)
+                }
             }
 
             let snapshots = result.flatMap { ticker -> [QuoteSnapshot] in
@@ -248,6 +295,126 @@ extension MarketStreamController {
                         usedBaseURL: url.host ?? urlString
                     )
                 }
+            }
+
+            if !snapshots.isEmpty {
+                await snapshotHandler(snapshots, [])
+            }
+        }
+    }
+
+    private static func connectGateSpot(
+        urlString: String,
+        symbolMap: [String: [WatchItem]],
+        acknowledgement: GateStreamAcknowledgement,
+        useProxy: Bool,
+        snapshotHandler: @escaping SnapshotHandler,
+        stateHandler: @escaping StateHandler,
+        settings: AppSettings
+    ) async throws {
+        guard let url = URL(string: urlString) else {
+            throw StreamError.invalidURL(urlString)
+        }
+
+        await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Connecting To Gate WebSocket: %@", comment: ""), urlString))])
+
+        let session = NetworkSessionFactory.makeSession(settings: settings, useProxy: useProxy)
+        let task = session.webSocketTask(with: url)
+        task.resume()
+
+        let subscribePayload: [String: Any] = [
+            "time": Int(Date().timeIntervalSince1970),
+            "channel": "spot.tickers",
+            "event": "subscribe",
+            "payload": symbolMap.keys.sorted()
+        ]
+        try await task.send(.string(try jsonString(subscribePayload)))
+
+        let heartbeat = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                let pingPayload: [String: Any] = [
+                    "time": Int(Date().timeIntervalSince1970),
+                    "channel": "spot.ping"
+                ]
+                try? await task.send(.string(try jsonString(pingPayload)))
+            }
+        }
+        defer {
+            heartbeat.cancel()
+            task.cancel(with: .goingAway, reason: nil)
+            session.invalidateAndCancel()
+        }
+
+        var acknowledged = false
+
+        while !Task.isCancelled {
+            let message = try await task.receive()
+            guard let text = Self.string(from: message) else { continue }
+            guard let payload = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else {
+                continue
+            }
+
+            if let type = payload["type"] as? String, type == "upgrade" {
+                let message = payload["msg"] as? String ?? NSLocalizedString("Service Upgrade", comment: "")
+                throw StreamError.server(message)
+            }
+
+            let channel = payload["channel"] as? String
+            let event = payload["event"] as? String
+
+            if channel == "spot.pong" {
+                continue
+            }
+
+            if let errorObject = payload["error"] as? [String: Any], !errorObject.isEmpty {
+                let message = errorObject["message"] as? String ?? NSLocalizedString("Unknown Subscription Error", comment: "")
+                throw StreamError.server(message)
+            }
+
+            if event == "subscribe" {
+                if !acknowledged {
+                    acknowledged = true
+                    if await acknowledgement.markConnected() {
+                        await stateHandler(.gateSpot, .connected)
+                    }
+                    await snapshotHandler([], [LogEntry(level: .info, message: String(format: NSLocalizedString("Gate WebSocket Subscribed %d Symbols.", comment: ""), symbolMap.count))])
+                }
+                continue
+            }
+
+            guard channel == "spot.tickers", event == "update",
+                  let result = payload["result"] as? [String: Any],
+                  let currencyPair = (result["currency_pair"] as? String)?.uppercased(),
+                  let items = symbolMap[currencyPair]
+            else {
+                continue
+            }
+
+            if !acknowledged {
+                acknowledged = true
+                if await acknowledgement.markConnected() {
+                    await stateHandler(.gateSpot, .connected)
+                }
+            }
+
+            let lastValue = Double(result["last"] as? String ?? "")
+            let percent = Double(result["change_percentage"] as? String ?? "")
+            let previous = (percent ?? 0) == -100 ? nil : (lastValue ?? 0) / (1 + (percent ?? 0) / 100)
+            let change = (lastValue ?? 0) - (previous ?? 0)
+
+            let snapshots = items.map { item in
+                QuoteSnapshot(
+                    id: item.id,
+                    item: item,
+                    price: lastValue,
+                    change: change,
+                    changePercent: percent,
+                    sourceLabel: item.sourceKind.title,
+                    marketStatus: NSLocalizedString("Live", comment: ""),
+                    fetchedAt: Date(),
+                    usedBaseURL: url.host ?? urlString
+                )
             }
 
             if !snapshots.isEmpty {

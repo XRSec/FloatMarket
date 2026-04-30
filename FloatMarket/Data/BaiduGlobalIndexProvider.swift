@@ -174,6 +174,20 @@ extension WatchItem {
 }
 
 extension MarketDataClient {
+    private static func baiduHTTPHeaders(config: EndpointConfiguration) -> [String: String] {
+        var headers = [
+            "Accept": "application/json",
+            "Referer": "https://gushitong.baidu.com/",
+            "User-Agent": "Mozilla/5.0 FloatMarket"
+        ]
+
+        if config.hasBDUSS {
+            headers["Cookie"] = "BDUSS=\(config.trimmedBDUSS)"
+        }
+
+        return headers
+    }
+
     // 获取百度股市通数据（HTTP 方式）
     // 根据交易时间智能判断是否需要刷新，避免收盘后不必要的轮询
     func fetchBaidu(
@@ -246,7 +260,8 @@ extension MarketDataClient {
                 URLQueryItem(name: "area", value: area.rawValue)
             ],
             config: config,
-            settings: settings
+            settings: settings,
+            headers: Self.baiduHTTPHeaders(config: config)
         )
 
         switch attempt {
@@ -255,6 +270,11 @@ extension MarketDataClient {
 
         case let .success(data, baseURL):
             do {
+                if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
+                    return SourceFetchResult(
+                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), area.title, resultCode))]
+                    )
+                }
                 // 解析 JSON 响应
                 let response = try JSONDecoder().decode(BaiduGlobalIndexResponse.self, from: data)
                 let quotes = response.Result.body
@@ -312,7 +332,8 @@ extension MarketDataClient {
                 URLQueryItem(name: "finClientType", value: "pc")
             ],
             config: config,
-            settings: settings
+            settings: settings,
+            headers: Self.baiduHTTPHeaders(config: config)
         )
 
         switch attempt {
@@ -321,6 +342,11 @@ extension MarketDataClient {
 
         case let .success(data, baseURL):
             do {
+                if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
+                    return SourceFetchResult(
+                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), resultCode))]
+                    )
+                }
                 // 解析外汇市场的 JSON 响应（结构与指数不同）
                 let response = try JSONDecoder().decode(BaiduBannerResponse.self, from: data)
                 let mapped = Dictionary(uniqueKeysWithValues: response.Result.list.map { ($0.code.uppercased(), $0) })
@@ -357,6 +383,14 @@ extension MarketDataClient {
                 )
             }
         }
+    }
+
+    private static func baiduResultCode(in data: Data) -> String? {
+        guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let resultCode = payload["ResultCode"] else {
+            return nil
+        }
+        return String(describing: resultCode)
     }
 }
 
@@ -405,8 +439,7 @@ extension MarketStreamController {
         settings: AppSettings
     ) async {
         let urls = config.candidateWebSocketURLs
-        await stateHandler(.baiduGlobalIndex, .connecting)
-        
+
         // 检查是否配置了 WebSocket URL
         guard !urls.isEmpty else {
             await stateHandler(.baiduGlobalIndex, .disconnected)
@@ -414,35 +447,30 @@ extension MarketStreamController {
             return
         }
 
-        // 构建订阅列表
-        // 只订阅支持 WebSocket 且当前在交易时段的指数
-        var subscriptionByKey: [String: BaiduStreamSubscription] = [:]
-        var itemMap: [String: [WatchItem]] = [:]
-        for item in items {
-            // 检查是否支持 WebSocket 订阅
-            guard let subscription = item.baiduStreamSubscription else {
-                continue
-            }
-            // 检查当前是否在交易时段
-            guard item.baiduShouldUseStreamNow else {
-                continue
-            }
-            subscriptionByKey[subscription.key] = subscription
-            itemMap[subscription.key, default: []].append(item)
-        }
-
-        let subscriptions = subscriptionByKey
-            .keys
-            .sorted()
-            .compactMap { subscriptionByKey[$0] }
-
-        guard !subscriptions.isEmpty else {
-            await stateHandler(.baiduGlobalIndex, .disconnected)
-            return
-        }
-
         var index = 0
         while !Task.isCancelled {
+            var subscriptionByKey: [String: BaiduStreamSubscription] = [:]
+            var itemMap: [String: [WatchItem]] = [:]
+            for item in items {
+                guard let subscription = item.baiduStreamSubscription,
+                      item.baiduShouldUseStreamNow else {
+                    continue
+                }
+                subscriptionByKey[subscription.key] = subscription
+                itemMap[subscription.key, default: []].append(item)
+            }
+
+            let subscriptions = subscriptionByKey
+                .keys
+                .sorted()
+                .compactMap { subscriptionByKey[$0] }
+
+            guard !subscriptions.isEmpty else {
+                await stateHandler(.baiduGlobalIndex, .standby)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                continue
+            }
+
             let currentURL = urls[index % urls.count]
             index += 1
 

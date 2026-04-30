@@ -418,6 +418,7 @@ struct EndpointConfiguration: Codable, Equatable {
     var timeout: Double = 8
     var primaryWebSocketURL: String = ""
     var backupWebSocketURL: String = ""
+    var bduss: String = ""
     var useProxy = false
 
     enum CodingKeys: String, CodingKey {
@@ -426,6 +427,7 @@ struct EndpointConfiguration: Codable, Equatable {
         case timeout
         case primaryWebSocketURL
         case backupWebSocketURL
+        case bduss
         case useProxy
     }
 
@@ -449,6 +451,14 @@ struct EndpointConfiguration: Codable, Equatable {
                     result.append(element)
                 }
             }
+    }
+
+    var trimmedBDUSS: String {
+        bduss.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var hasBDUSS: Bool {
+        !trimmedBDUSS.isEmpty
     }
 }
 
@@ -1122,6 +1132,7 @@ struct AppSettings: Codable, Equatable {
 }
 
 enum StreamConnectionState: String {
+    case standby
     case disconnected
     case connecting
     case connected
