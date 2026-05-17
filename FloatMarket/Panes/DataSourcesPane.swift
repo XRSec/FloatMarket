@@ -72,17 +72,17 @@ struct DataSourcesPane: View {
                                     .padding(.vertical, 4)
 
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(NSLocalizedString("BDUSS", comment: ""))
+                                    Text(NSLocalizedString("FinScope Cookies", comment: ""))
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundStyle(.secondary)
-
+                                    Text(NSLocalizedString("FinScope Cookies BDUSS", comment: ""))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
                                     SecureField("BDUSS=", text: baiduBDUSSBinding)
                                         .textFieldStyle(.roundedBorder)
                                         .font(.system(size: 12, weight: .medium, design: .monospaced))
 
-                                    Text(NSLocalizedString("Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane.", comment: ""))
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(.secondary)
+                  
                                 }
                             }
                         )
@@ -551,18 +551,6 @@ private struct WatchItemDetailEditor: View {
                     TextField(NSLocalizedString("Symbol / Contract", comment: ""), text: $item.symbol)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
-
-                    if item.sourceKind == .baiduGlobalIndex {
-                        Picker(NSLocalizedString("Region", comment: ""), selection: Binding(
-                            get: { item.area ?? .america },
-                            set: { item.area = $0 }
-                        )) {
-                            ForEach(BaiduArea.allCases) { area in
-                                Text(NSLocalizedString(area.title, comment: "")).tag(area)
-                            }
-                        }
-                        .frame(maxWidth: 100)
-                    }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -621,7 +609,7 @@ private struct WatchItemDetailEditor: View {
 
                             HStack(spacing: 10) {
                                 Picker(NSLocalizedString("Custom Open Time", comment: ""), selection: customOpenTimeSelection) {
-                                    Text("Default \(defaultOpenTimeText)")
+                                    Text(String(format: NSLocalizedString("Default %@", comment: ""), defaultOpenTimeText))
                                         .tag(String?.none)
 
                                     ForEach(openTimeOptions, id: \.self) { option in
@@ -645,7 +633,7 @@ private struct WatchItemDetailEditor: View {
 
                             HStack(spacing: 10) {
                                 Picker(NSLocalizedString("Custom Close Time", comment: ""), selection: customCloseTimeSelection) {
-                                    Text("Default \(defaultCloseTimeText)")
+                                    Text(String(format: NSLocalizedString("Default %@", comment: ""), defaultCloseTimeText))
                                         .tag(String?.none)
 
                                     ForEach(closeTimeOptions, id: \.self) { option in

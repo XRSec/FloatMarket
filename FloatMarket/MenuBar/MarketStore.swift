@@ -30,6 +30,12 @@ private enum StreamSyncTrigger: Equatable {
     case connected
 }
 
+private enum MarketTransportPlan {
+    case httpOnly
+    case streamPrimary
+    case standby
+}
+
 @MainActor
 final class MarketStore: ObservableObject {
     let settingsStore: SettingsStore
@@ -188,7 +194,10 @@ final class MarketStore: ObservableObject {
         guard let lastUpdated else {
             return NSLocalizedString("Waiting For First Sync", comment: "")
         }
-        return "Updated \(Self.timeFormatter.string(from: lastUpdated))"
+        return String(
+            format: NSLocalizedString("Updated %@", comment: ""),
+            Self.timeFormatter.string(from: lastUpdated)
+        )
     }
 
     var popupStatusText: String {
@@ -201,7 +210,9 @@ final class MarketStore: ObservableObject {
 
     var footerStatusText: String {
         let interval = Int(settings.refreshInterval)
-        return settings.autoRefresh ? "Auto \(interval)s" : NSLocalizedString("Manual", comment: "")
+        return settings.autoRefresh
+            ? String(format: NSLocalizedString("Auto %ds", comment: ""), interval)
+            : NSLocalizedString("Manual", comment: "")
     }
 
     var menuBarStatusText: String {
@@ -222,7 +233,11 @@ final class MarketStore: ObservableObject {
             return NSLocalizedString("No realtime stream is enabled.", comment: "")
         }
         let connectedCount = active.count - disconnected
-        return "\(connectedCount) / \(active.count) streams connected"
+        return String(
+            format: NSLocalizedString("%d / %d streams connected", comment: ""),
+            connectedCount,
+            active.count
+        )
     }
 
     // MARK: - Logs
@@ -505,14 +520,14 @@ final class MarketStore: ObservableObject {
         Array(
             Set(
                 settings.watchlist
-                    .filter { $0.enabled && Self.isStreamingWatchItem($0) }
+                    .filter { $0.enabled && Self.isStreamingCapableWatchItem($0) }
                     .map { Self.streamStateKind(for: $0.sourceKind) }
             )
         ).sorted { $0.rawValue < $1.rawValue }
     }
 
     private var pollingRefreshItems: [WatchItem] {
-        settings.watchlist.filter { $0.enabled && !Self.isStreamingWatchItem($0) }
+        snapshotRefreshItems(for: "scheduled")
     }
 
     private var hasPollingRefreshItems: Bool {
@@ -555,6 +570,7 @@ final class MarketStore: ObservableObject {
         guard previous != state else { return }
 
         streamStates[kind] = state
+        restartRefreshLoop()
 
         switch state {
         case .connected:
@@ -603,7 +619,7 @@ final class MarketStore: ObservableObject {
 
         switch request {
         case let .snapshot(reason):
-            items = pollingRefreshItems
+            items = snapshotRefreshItems(for: reason)
             label = snapshotRefreshLabel(for: reason)
             shouldLogSkip = reason == "control-center-general" || reason == "empty-state"
             shouldLogLifecycle = false
@@ -611,7 +627,8 @@ final class MarketStore: ObservableObject {
         case let .streamFallback(kind, trigger):
             items = settings.watchlist.filter { item in
                 guard item.enabled else { return false }
-                return Self.streamStateKind(for: item.sourceKind) == kind
+                return Self.streamStateKind(for: item.sourceKind) == kind &&
+                    Self.isStreamingCapableWatchItem(item)
             }
             label = streamRefreshLabel(for: kind, trigger: trigger)
             shouldLogSkip = false
@@ -690,10 +707,61 @@ final class MarketStore: ObservableObject {
         }
     }
 
-    private static func isStreamingWatchItem(_ item: WatchItem) -> Bool {
+    private func snapshotRefreshItems(for reason: String) -> [WatchItem] {
+        let enabledItems = settings.watchlist.filter(\.enabled)
+
+        switch reason {
+        case "scheduled":
+            return enabledItems.filter(shouldPollOnSchedule)
+        default:
+            return enabledItems
+        }
+    }
+
+    private func shouldPollOnSchedule(_ item: WatchItem) -> Bool {
+        switch transportPlan(for: item) {
+        case .httpOnly:
+            return true
+        case .streamPrimary, .standby:
+            return false
+        }
+    }
+
+    private func transportPlan(for item: WatchItem) -> MarketTransportPlan {
+        guard Self.isStreamingCapableWatchItem(item) else {
+            return .httpOnly
+        }
+
+        guard Self.shouldPreferStreamNow(for: item) else {
+            return .httpOnly
+        }
+
+        let streamKind = Self.streamStateKind(for: item.sourceKind)
+        switch streamStates[streamKind] ?? .disconnected {
+        case .connected, .connecting:
+            return .streamPrimary
+        case .disconnected:
+            return .httpOnly
+        case .standby:
+            return .standby
+        }
+    }
+
+    private static func isStreamingCapableWatchItem(_ item: WatchItem) -> Bool {
         switch item.sourceKind {
         case .baiduGlobalIndex:
             return item.baiduStreamSubscription != nil
+        case .okxSpot, .gateSpot, .gateSpotMarket, .binancePerp:
+            return true
+        case .sinaGlobalIndex, .okxSpotMarket, .binanceSpot:
+            return false
+        }
+    }
+
+    private static func shouldPreferStreamNow(for item: WatchItem) -> Bool {
+        switch item.sourceKind {
+        case .baiduGlobalIndex:
+            return item.baiduShouldUseStreamNow
         case .okxSpot, .gateSpot, .gateSpotMarket, .binancePerp:
             return true
         case .sinaGlobalIndex, .okxSpotMarket, .binanceSpot:

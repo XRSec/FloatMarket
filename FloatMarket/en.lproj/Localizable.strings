@@ -124,7 +124,6 @@
 "Refresh Interval" = "Refresh Interval";
 "Refresh Now" = "Refresh Now";
 "Refreshing" = "Refreshing";
-"Region" = "Region";
 "Reset" = "Reset";
 "Reset Defaults" = "Reset Defaults";
 "Reset Watchlist?" = "Reset Watchlist?";
@@ -155,12 +154,16 @@
 "Time" = "Time";
 "Timeout" = "Timeout";
 "Timeout triggers fallback to backup endpoints." = "Timeout triggers fallback to backup endpoints.";
+"Default %@" = "Default %@";
 "Use Proxy" = "Use Proxy";
 "Times follow exchange local time with hour and half-hour options." = "Times follow exchange local time with hour and half-hour options.";
 "Total" = "Total";
 "Trading Session" = "Trading Session";
 "Lower values make the window more translucent; near zero keeps only the outline." = "Lower values make the window more translucent; near zero keeps only the outline.";
 "Waiting For First Sync" = "Waiting For First Sync";
+"Updated %@" = "Updated %@";
+"Auto %ds" = "Auto %ds";
+"%d / %d streams connected" = "%d / %d streams connected";
 "Warning" = "Warning";
 "Warnings" = "Warnings";
 "Watchlist" = "Watchlist";
@@ -298,7 +301,9 @@
 "Auto refresh only polls indices and HTTP snapshot feeds. WebSocket feeds only resync after disconnects or reconnects." = "Auto refresh only polls indices and HTTP snapshot feeds. WebSocket feeds only resync after disconnects or reconnects.";
 "Choose how often polled sources are checked. This does not force timer-based refreshes on WebSocket feeds." = "Choose how often polled sources are checked. This does not force timer-based refreshes on WebSocket feeds.";
 "Polling controls live here. WebSocket feeds recover with snapshot syncs after disconnects and reconnects." = "Polling controls live here. WebSocket feeds recover with snapshot syncs after disconnects and reconnects.";
-"Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane." = "Baidu self-select requests now rely on your BDUSS session cookie. Leave it empty to disable the cookie-authenticated lane.";
+"FinScope Cookies" = "Cookies";
+"FinScope Cookies BDUSS" = "Cookies.BDUSS Value";
+"Self-Select" = "Self-Select";
 "Refresh Now only polls indices and HTTP snapshot feeds." = "Refresh Now only polls indices and HTTP snapshot feeds.";
 "WebSocket recovery syncs, request failures, proxy test results, and decoding issues will appear here." = "WebSocket recovery syncs, request failures, proxy test results, and decoding issues will appear here.";
 "Events are shown newest first so stream recovery and recent failures stay easy to trace." = "Events are shown newest first so stream recovery and recent failures stay easy to trace.";

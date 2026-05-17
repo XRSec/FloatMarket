@@ -3,8 +3,8 @@
  * 百度股市通全球指数数据提供者
  *
  * 功能说明：
- * 1. HTTP 轮询：通过 REST API 获取全球指数行情数据
- * 2. WebSocket 实时流：订阅实时行情推送（仅在交易时段）
+ * 1. HTTP 快照：通过 /selfselect/gethomeinfo 获取百度“我的自选”行情
+ * 2. WebSocket 实时流：优先订阅支持流式推送的指数（仅在交易时段）
  * 3. 交易时间判断：根据市场时区和交易时段智能控制数据获取
  * 4. 调试日志：记录详细的请求和响应信息到本地文件
  *
@@ -16,26 +16,6 @@
  */
 
 import Foundation
-
-
-
-// WebSocket 连接状态
-private enum BaiduWebSocketStatus: String {
-    case connecting  // 连接中
-    case connected   // 已连接
-    case disconnect  // 已断开
-    case disabled    // 已禁用
-}
-
-// WebSocket 消息状态
-private enum BaiduWebSocketMessageStatus: String {
-    case connected   // 连接成功
-    case disconnect  // 断开连接
-    case reconnect   // 重新连接
-    case msg         // 普通消息
-    case error       // 错误
-    case noTrading = "no_trading"  // 非交易时段
-}
 
 // WebSocket 产品类型
 private enum BaiduWebSocketProduct: String {
@@ -50,23 +30,6 @@ private enum BaiduWebSocketMethod: String {
     case unsubscribe  // 取消订阅
     case patch        // 更新
     case ping         // 心跳
-}
-
-// 百度交易状态
-// 只有这些状态下才会推送 WebSocket 数据
-private enum BaiduTradeStatus: String {
-    case trade = "TRADE"          // 交易中
-    case postMarket = "POSMT"     // 盘后交易
-    case preMarket = "PRETR"      // 盘前交易
-    case openCall = "OCALL"       // 集合竞价
-
-    // 符合 WebSocket 推送条件的交易状态
-    static let wsEligibleCases: Set<String> = [
-        BaiduTradeStatus.trade.rawValue,
-        BaiduTradeStatus.postMarket.rawValue,
-        BaiduTradeStatus.preMarket.rawValue,
-        BaiduTradeStatus.openCall.rawValue
-    ]
 }
 
 // 百度 WebSocket 订阅信息
@@ -126,17 +89,6 @@ extension WatchItem {
             customCloseTime: customCloseTime
         ).isTrading
     }
-    
-    // 判断当前是否在交易时段（用于 HTTP 轮询判断）
-    var baiduIsTradingNow: Bool {
-        guard let schedule = IndexMarketSchedule.forSymbol(symbol) else { return true }
-        return schedule.timing(
-            now: Date(),
-            hasSnapshot: true,
-            customOpenTime: customOpenTime,
-            customCloseTime: customCloseTime
-        ).isTrading
-    }
 
     // 解析市场代码（从 quickLink URL 或 symbol 推断）
     // 返回值：us（美股）、hk（港股）、ab（A股+B股）
@@ -150,7 +102,7 @@ extension WatchItem {
         for candidateURL in candidateURLs.compactMap({ $0 }) {
             guard let url = URL(string: candidateURL) else { continue }
             // 从 URL 路径中提取市场代码
-            // 例如：https://gushitong.baidu.com/index/us-IXIC -> "us"
+            // 例如：https://finance.baidu.com/index/us-IXIC -> "us"
             let lastComponent = url.path.split(separator: "/").last.map(String.init) ?? ""
             let market = lastComponent.split(separator: "-").first.map(String.init)?.lowercased()
             if let market, !market.isEmpty {
@@ -177,7 +129,7 @@ extension MarketDataClient {
     private static func baiduHTTPHeaders(config: EndpointConfiguration) -> [String: String] {
         var headers = [
             "Accept": "application/json",
-            "Referer": "https://gushitong.baidu.com/",
+            "Referer": "https://finance.baidu.com/",
             "User-Agent": "Mozilla/5.0 FloatMarket"
         ]
 
@@ -218,117 +170,23 @@ extension MarketDataClient {
             return SourceFetchResult()
         }
 
-        let grouped = Dictionary(grouping: refreshableItems) { $0.area ?? .all }
-        var combined = SourceFetchResult()
-
-        await withTaskGroup(of: SourceFetchResult.self) { group in
-            for (area, areaItems) in grouped {
-                group.addTask {
-                    await fetchBaiduArea(area: area, items: areaItems, config: config, settings: settings)
-                }
-            }
-
-            for await result in group {
-                combined.snapshots.append(contentsOf: result.snapshots)
-                combined.logs.append(contentsOf: result.logs)
-            }
-        }
-
-        return combined
-    }
-
-    // 按区域获取百度股市通数据
-    // area: 市场区域（美洲、亚洲、欧非、外汇等）
-    private func fetchBaiduArea(
-        area: BaiduArea,
-        items: [WatchItem],
-        config: EndpointConfiguration,
-        settings: AppSettings
-    ) async -> SourceFetchResult {
-        // 外汇市场使用不同的 API
-        if area == .foreign {
-            return await fetchBaiduForeign(items: items, config: config, settings: settings)
-        }
-
-        // 请求百度股市通 API
-        let attempt = await request(
-            sourceName: NSLocalizedString("Baidu Gushitong", comment: ""),
-            path: "/vapi/v1/globalindexrank",
-            queryItems: [
-                URLQueryItem(name: "pn", value: "0"),
-                URLQueryItem(name: "rn", value: "120"),
-                URLQueryItem(name: "area", value: area.rawValue)
-            ],
+        return await fetchBaiduSelfSelectHomeInfo(
+            items: refreshableItems,
             config: config,
-            settings: settings,
-            headers: Self.baiduHTTPHeaders(config: config)
+            settings: settings
         )
-
-        switch attempt {
-        case let .failure(logs):
-            return SourceFetchResult(logs: logs)
-
-        case let .success(data, baseURL):
-            do {
-                if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
-                    return SourceFetchResult(
-                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), area.title, resultCode))]
-                    )
-                }
-                // 解析 JSON 响应
-                let response = try JSONDecoder().decode(BaiduGlobalIndexResponse.self, from: data)
-                let quotes = response.Result.body
-                
-                // 构建 symbol -> quote 的映射表（不区分大小写）
-                let mapped = Dictionary(uniqueKeysWithValues: quotes.map { ($0.code.uppercased(), $0) })
-                
-                // 为每个监控项生成快照
-                let snapshots = items.compactMap { item -> QuoteSnapshot? in
-                    guard let quote = mapped[item.symbol.uppercased()] else { return nil }
-                    return QuoteSnapshot(
-                        id: item.id,
-                        item: item,
-                        price: Double(quote.last_px),
-                        change: Double(quote.px_change),
-                        changePercent: Self.cleanPercent(quote.px_change_rate),
-                        sourceLabel: item.sourceKind.title,
-                        marketStatus: area.title,
-                        fetchedAt: Date(),
-                        usedBaseURL: baseURL
-                    )
-                }
-
-                // 生成日志：成功和缺失的项目
-                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.", comment: ""), area.title, snapshots.count))]
-                let missing = items.filter { item in
-                    !snapshots.contains(where: { $0.item.id == item.id })
-                }
-                logs.append(contentsOf: missing.map {
-                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), area.title, $0.displayName, $0.symbol))
-                })
-                
-                return SourceFetchResult(snapshots: snapshots, logs: logs)
-            } catch {
-                return SourceFetchResult(
-                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), area.title, error.localizedDescription))]
-                )
-            }
-        }
     }
 
-    // 获取外汇市场数据（使用不同的 API 端点）
-    private func fetchBaiduForeign(
+    // 百度 HTTP 刷新统一走自选首页接口。旧的公开指数、外汇接口已不稳定，容易返回 ResultCode=403。
+    private func fetchBaiduSelfSelectHomeInfo(
         items: [WatchItem],
         config: EndpointConfiguration,
         settings: AppSettings
     ) async -> SourceFetchResult {
-        
-        // 外汇市场使用 /api/getbanner 接口
         let attempt = await request(
             sourceName: NSLocalizedString("Baidu Gushitong", comment: ""),
-            path: "/api/getbanner",
+            path: "/selfselect/gethomeinfo",
             queryItems: [
-                URLQueryItem(name: "market", value: "foreign"),
                 URLQueryItem(name: "finClientType", value: "pc")
             ],
             config: config,
@@ -344,42 +202,44 @@ extension MarketDataClient {
             do {
                 if let resultCode = Self.baiduResultCode(in: data), resultCode != "0" {
                     return SourceFetchResult(
-                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), resultCode))]
+                        logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Request Rejected With ResultCode %@.", comment: ""), NSLocalizedString("Self-Select", comment: ""), resultCode))]
                     )
                 }
-                // 解析外汇市场的 JSON 响应（结构与指数不同）
-                let response = try JSONDecoder().decode(BaiduBannerResponse.self, from: data)
-                let mapped = Dictionary(uniqueKeysWithValues: response.Result.list.map { ($0.code.uppercased(), $0) })
-                
-                // 为每个监控项生成快照
+
+                let quotes = try Self.baiduSelfSelectQuotes(in: data)
+                let mapped = quotes.reduce(into: [String: BaiduSelfSelectQuote]()) { result, quote in
+                    for key in Self.baiduQuoteKeys(for: quote.code) {
+                        result[key] = quote
+                    }
+                }
+
                 let snapshots = items.compactMap { item -> QuoteSnapshot? in
                     guard let quote = mapped[item.symbol.uppercased()] else { return nil }
                     return QuoteSnapshot(
                         id: item.id,
                         item: item,
-                        price: Double(quote.lastPrice),
-                        change: Double(quote.increase),
-                        changePercent: Self.cleanPercent(quote.ratio),
+                        price: quote.price,
+                        change: quote.change,
+                        changePercent: quote.changePercent,
                         sourceLabel: item.sourceKind.title,
-                        marketStatus: NSLocalizedString("Foreign Exchange", comment: ""),
+                        marketStatus: quote.marketStatus ?? item.area?.title,
                         fetchedAt: Date(),
                         usedBaseURL: baseURL
                     )
                 }
 
-                // 生成日志
-                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), snapshots.count))]
+                var logs = [LogEntry(level: .info, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Refresh Succeeded, Matched %d Items.", comment: ""), NSLocalizedString("Self-Select", comment: ""), snapshots.count))]
                 let missing = items.filter { item in
                     !snapshots.contains(where: { $0.item.id == item.id })
                 }
                 logs.append(contentsOf: missing.map {
-                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), $0.displayName, $0.symbol))
+                    LogEntry(level: .warning, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Did Not Return %@ (%@).", comment: ""), NSLocalizedString("Self-Select", comment: ""), $0.displayName, $0.symbol))
                 })
-                
+
                 return SourceFetchResult(snapshots: snapshots, logs: logs)
             } catch {
                 return SourceFetchResult(
-                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), NSLocalizedString("Foreign Exchange", comment: ""), error.localizedDescription))]
+                    logs: [LogEntry(level: .error, message: String(format: NSLocalizedString("Baidu Gushitong [%@] Decode Failed: %@", comment: ""), NSLocalizedString("Self-Select", comment: ""), error.localizedDescription))]
                 )
             }
         }
@@ -392,40 +252,133 @@ extension MarketDataClient {
         }
         return String(describing: resultCode)
     }
+
+    private static func baiduSelfSelectQuotes(in data: Data) throws -> [BaiduSelfSelectQuote] {
+        let payload = try JSONSerialization.jsonObject(with: data)
+        var quotes: [BaiduSelfSelectQuote] = []
+        collectBaiduSelfSelectQuotes(from: payload, into: &quotes)
+        return quotes
+    }
+
+    private static func collectBaiduSelfSelectQuotes(from value: Any, into quotes: inout [BaiduSelfSelectQuote]) {
+        if let dictionary = value as? [String: Any] {
+            if let quote = baiduSelfSelectQuote(from: dictionary) {
+                quotes.append(quote)
+            }
+            for child in dictionary.values {
+                collectBaiduSelfSelectQuotes(from: child, into: &quotes)
+            }
+            return
+        }
+
+        if let array = value as? [Any] {
+            for child in array {
+                collectBaiduSelfSelectQuotes(from: child, into: &quotes)
+            }
+        }
+    }
+
+    private static func baiduSelfSelectQuote(from dictionary: [String: Any]) -> BaiduSelfSelectQuote? {
+        guard let code = firstText(
+            in: dictionary,
+            keys: ["code", "symbol", "stockCode", "stock_code", "exchangeCode", "exchange_code"]
+        )?.uppercased(), !code.isEmpty else {
+            return nil
+        }
+
+        let price = firstNumber(
+            in: dictionary,
+            keys: ["price", "lastPrice", "last_px", "lastPx", "close", "curPrice", "currentPrice", "latestPrice", "latest"]
+        )
+        let change = firstNumber(
+            in: dictionary,
+            keys: ["increase", "px_change", "pxChange", "change", "netChange", "range"]
+        )
+        let changePercent = firstNumber(
+            in: dictionary,
+            keys: ["ratio", "px_change_rate", "pxChangeRate", "changePercent", "netChangeRatio", "increaseRatio"]
+        )
+
+        guard price != nil || change != nil || changePercent != nil else {
+            return nil
+        }
+
+        return BaiduSelfSelectQuote(
+            code: code,
+            name: firstText(in: dictionary, keys: ["name", "displayName", "stockName", "stock_name"]),
+            price: price,
+            change: change,
+            changePercent: changePercent,
+            marketStatus: firstText(in: dictionary, keys: ["marketStatus", "stockStatus", "tradeStatusCN", "statusName"])
+        )
+    }
+
+    private static func baiduQuoteKeys(for code: String) -> [String] {
+        let uppercased = code.uppercased()
+        var keys = [uppercased]
+        let knownPrefixes = Set(["US", "HK", "AB", "CN", "JP", "KR", "UK", "FR", "DE", "SG", "GLOBAL"])
+
+        if let separatorIndex = uppercased.firstIndex(of: "-") {
+            let prefix = String(uppercased[..<separatorIndex])
+            let suffix = String(uppercased[uppercased.index(after: separatorIndex)...])
+            if knownPrefixes.contains(prefix), !suffix.isEmpty {
+                keys.append(suffix)
+            }
+        }
+
+        return keys.reduce(into: [String]()) { result, key in
+            if !result.contains(key) {
+                result.append(key)
+            }
+        }
+    }
+
+    private static func firstText(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let text = dictionary[key] as? String {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, trimmed != "--" {
+                    return trimmed
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func firstNumber(in dictionary: [String: Any], keys: [String]) -> Double? {
+        for key in keys {
+            if let number = baiduNumber(dictionary[key]) {
+                return number
+            }
+        }
+        return nil
+    }
+
+    private static func baiduNumber(_ rawValue: Any?) -> Double? {
+        if let number = rawValue as? NSNumber {
+            return number.doubleValue
+        }
+
+        guard let rawText = rawValue as? String else { return nil }
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "--" else { return nil }
+
+        let sanitized = trimmed
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "%", with: "")
+            .replacingOccurrences(of: "+", with: "")
+
+        return Double(sanitized)
+    }
 }
 
-// 百度全球指数 API 响应结构
-private struct BaiduGlobalIndexResponse: Decodable {
-    struct ResultBody: Decodable {
-        let body: [BaiduQuote]
-    }
-
-    struct BaiduQuote: Decodable {
-        let name: String           // 指数名称
-        let code: String           // 指数代码
-        let last_px: String        // 最新价格
-        let px_change: String      // 涨跌额
-        let px_change_rate: String // 涨跌幅
-    }
-
-    let Result: ResultBody
-}
-
-// 百度外汇市场 API 响应结构
-private struct BaiduBannerResponse: Decodable {
-    struct ResultBody: Decodable {
-        let list: [BannerItem]
-    }
-
-    struct BannerItem: Decodable {
-        let code: String      // 货币对代码
-        let name: String      // 货币对名称
-        let lastPrice: String // 最新价格
-        let increase: String  // 涨跌额
-        let ratio: String     // 涨跌幅
-    }
-
-    let Result: ResultBody
+private struct BaiduSelfSelectQuote {
+    let code: String
+    let name: String?
+    let price: Double?
+    let change: Double?
+    let changePercent: Double?
+    let marketStatus: String?
 }
 
 extension MarketStreamController {

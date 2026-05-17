@@ -527,119 +527,119 @@ enum WatchItemTemplateCatalog {
         displayName: NSLocalizedString("Nasdaq", comment: ""),
         symbol: "IXIC",
         area: .america,
-        defaultURL: "https://gushitong.baidu.com/index/us-IXIC"
+        defaultURL: "https://finance.baidu.com/index/us-IXIC"
     )
     private static let baiduDowJones = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("Dow Jones", comment: ""),
         symbol: "DJI",
         area: .america,
-        defaultURL: "https://gushitong.baidu.com/index/us-DJI"
+        defaultURL: "https://finance.baidu.com/index/us-DJI"
     )
     private static let baiduSP500 = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("S&P 500", comment: ""),
         symbol: "SPX",
         area: .america,
-        defaultURL: "https://gushitong.baidu.com/index/us-SPX"
+        defaultURL: "https://finance.baidu.com/index/us-SPX"
     )
     private static let baiduFTSE = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("FTSE 100", comment: ""),
         symbol: "FTSE",
         area: .europeafrica,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/uk-FTSE"
+        defaultURL: "https://finance.baidu.com/globalIndex/uk-FTSE"
     )
     private static let baiduCAC = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("CAC 40", comment: ""),
         symbol: "CAC",
         area: .europeafrica,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/fr-CAC"
+        defaultURL: "https://finance.baidu.com/globalIndex/fr-CAC"
     )
     private static let baiduNikkei = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("Nikkei 225", comment: ""),
         symbol: "NK225",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/jp-NK225"
+        defaultURL: "https://finance.baidu.com/globalIndex/jp-NK225"
     )
     private static let baiduHangSeng = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("Hang Seng", comment: ""),
         symbol: "HSI",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/hk-HSI"
+        defaultURL: "https://finance.baidu.com/globalIndex/hk-HSI"
     )
     private static let baiduKOSPI = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("KOSPI", comment: ""),
         symbol: "KOSPI",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/kr-KOSPI"
+        defaultURL: "https://finance.baidu.com/globalIndex/kr-KOSPI"
     )
     private static let baiduShanghai = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("Shanghai Composite", comment: ""),
         symbol: "000001",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/index/ab-000001"
+        defaultURL: "https://finance.baidu.com/index/ab-000001"
     )
     private static let baiduShenzhen = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("Shenzhen Component", comment: ""),
         symbol: "399001",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/index/ab-399001"
+        defaultURL: "https://finance.baidu.com/index/ab-399001"
     )
     private static let baiduA50 = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("FTSE China A50", comment: ""),
         symbol: "XIN9.LOC-FTX",
         area: .asia,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/sg-XIN9.LOC-FTX"
+        defaultURL: "https://finance.baidu.com/globalIndex/sg-XIN9.LOC-FTX"
     )
     private static let baiduDollarIndex = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("US Dollar Index", comment: ""),
         symbol: "DINIW",
         area: .foreign,
-        defaultURL: "https://gushitong.baidu.com/forex/global-DINIW"
+        defaultURL: "https://finance.baidu.com/forex/global-DINIW"
     )
     private static let baiduUSDCNY = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("USD/CNY", comment: ""),
         symbol: "USDCNY",
         area: .foreign,
-        defaultURL: "https://gushitong.baidu.com/forex/global-USDCNY"
+        defaultURL: "https://finance.baidu.com/forex/global-USDCNY"
     )
     private static let baiduUSDCNH = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("USD/CNH", comment: ""),
         symbol: "USDCNH",
         area: .foreign,
-        defaultURL: "https://gushitong.baidu.com/forex/global-USDCNH"
+        defaultURL: "https://finance.baidu.com/forex/global-USDCNH"
     )
     private static let baiduEURCNY = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("EUR/CNY", comment: ""),
         symbol: "EURCNY",
         area: .foreign,
-        defaultURL: "https://gushitong.baidu.com/forex/global-EURCNY"
+        defaultURL: "https://finance.baidu.com/forex/global-EURCNY"
     )
     private static let baiduUSDGBP = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("USD/GBP", comment: ""),
         symbol: "USDGBP",
         area: .foreign,
-        defaultURL: "https://gushitong.baidu.com/forex/global-USDGBP"
+        defaultURL: "https://finance.baidu.com/forex/global-USDGBP"
     )
     private static let baiduDAX = WatchItemTemplate(
         sourceKind: .baiduGlobalIndex,
         displayName: NSLocalizedString("German DAX", comment: ""),
         symbol: "DAX",
         area: .europeafrica,
-        defaultURL: "https://gushitong.baidu.com/globalIndex/de-DAX"
+        defaultURL: "https://finance.baidu.com/globalIndex/de-DAX"
     )
 
     private static let sinaDJI = WatchItemTemplate(
